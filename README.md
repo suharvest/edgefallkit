@@ -21,6 +21,12 @@ runtime images, one-command model preparation, and reproducible performance and
 accuracy evidence. It is an engineering reference implementation, **not a
 medical or emergency-response certification**.
 
+![reCamera Pro fall-detection debug-panel demo](assets/demo/recamera-pro-debug-fall-demo.gif)
+
+*Synthetic UI demo using the production reCamera Pro debug panel and WebSocket
+result schema. The two-person state sequence is injected for visualization; it
+is not accuracy or performance evidence.*
+
 ## Highlights
 
 - **One result contract:** every platform publishes the same reCamera-compatible

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-13",
+  "device": "recamera-pro-test",
+  "soc": "RV1126B",
+  "firmware": "V1.0.4",
+  "input": "official frame broker NV12 1280x720",
+  "model": "YOLO11n-Pose RKNN INT8 640x640",
+  "duration_seconds_each": 12.02,
+  "direct_rga": {
+    "path": "NV12 dma-buf -> RGA NV12 640x360 -> RGA RGB -> Python gray pad 640x640",
+    "websocket_fps": 18.13,
+    "metrics_fps_range": [17.5, 18.9],
+    "preprocess_ms_range": [0.0, 0.0],
+    "inference_ms_range": [42.0, 45.3],
+    "postprocess_ms_range": [1.9, 2.4],
+    "fallback_observed": false
+  },
+  "full_rgb_baseline": {
+    "path": "RGA full-resolution RGB -> Python letterbox 640x640",
+    "websocket_fps": 12.14,
+    "metrics_fps_range": [11.4, 12.4],
+    "preprocess_ms_range": [38.2, 43.1],
+    "inference_ms_range": [35.3, 37.9],
+    "postprocess_ms_range": [1.3, 1.6]
+  },
+  "websocket_fps_improvement_percent": 49.34,
+  "restore": {
+    "active_app": "retail-vision",
+    "pid": 1631,
+    "rkipc_pid": 961,
+    "temperature_c": 51.4,
+    "healthy_frame_output_observed": true
+  },
+  "notes": [
+    "The source skips Python letterbox, so loop-level preprocess is approximately zero; RGA work occurs in the frame source.",
+    "Inference time rose as frame delivery accelerated. End-to-end throughput, not inference time alone, is the relevant A/B metric.",
+    "This is a performance and geometry validation, not an accuracy evaluation."
+  ]
+}

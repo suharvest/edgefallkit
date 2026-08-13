@@ -246,6 +246,17 @@ fallback 为 TP11/FN1/TN11/FP4，Accuracy/F1 81.48%、Recall 91.67%，early aler
 因此生产默认保持 fallback，原生 profile 仅保留作审计实验。全体 pose coverage
 87.27%，S4 Fall 72.84%，明显低于 ADL 91.77%，是下一轮前端/RGA预处理优化重点。
 
+官方 frame broker 的性能优化已完成：原 1280×720 NV12→全尺寸 RGB→Python
+letterbox 改为 NV12 dma-buf 经 RGA 等比例缩到 640×360、再由 RGA 转 RGB，
+Python 只填充灰值 114 的边框。原图尺寸和独立 letterbox metadata 继续用于把
+pose/box 映回原图，RGA 任一步失败会永久降级到旧路径。12.02 秒真机 A/B 中，
+direct 路径为 18.13 FPS、主循环 preprocess 0.0 ms；旧路径为 12.14 FPS、
+preprocess 38.2–43.1 ms，吞吐提升 49.3%。完整结果见
+[`reports/recamera-pro-rga-direct-ab-20260813.md`](reports/recamera-pro-rga-direct-ab-20260813.md)
+和
+[`reports/recamera-pro-rga-direct-ab-20260813.json`](reports/recamera-pro-rga-direct-ab-20260813.json)。
+测试全程通过 appMgr 单活切换，结束后已恢复 `retail-vision` 并确认持续输出检测。
+
 ## reCamera 0.2.2 真机运行基线
 
 2026-08-13 在测试机 `recamera-one`（SG2002、reCamera OS 0.2.2）上通过
@@ -362,6 +373,23 @@ RK 专属 temporal trace 已在两板完成 Subjects 1–4 的独立、可恢复
 TP=12/FN=0/TN=12/FP=3；RK3576/RK3588 mean latency 分别为 1.492/1.525 s。
 完整命令见
 [`../platforms/rknn/TEMPORAL_TRAINING.md`](../platforms/rknn/TEMPORAL_TRAINING.md)。
+
+### RK MPP 等比例 letterbox 与 C++ GIL 优化
+
+生产视频链现在由 `mppvideodec`/RGA 等比例缩放，再把映射缓冲区一次复制到
+灰值 114 的 640×640 letterbox；非方形画面不再拉伸。1280×720 真机流在旧
+强制 640² 路径上两板均协商失败，新路径在 RK3576/RK3588 均正确协商为
+640×360，并各自通过 200/200 MQTT contract。RK3576 的 E2E
+inference/pipeline 均值为 62.47/63.09 ms；RK3588（保留 voice/LLM 业务）为
+54.18/54.45 ms。
+
+C++ pose decode/NMS 仅在数值热段释放 GIL。两 context 吞吐在 RK3576 基本
+持平（29.60→29.42 FPS），RK3588 提升 2.2%（37.34→38.16 FPS），说明当前
+主要瓶颈仍是 NPU 而不是 Python GIL。完整方法和逐板 JSON 见
+[`reports/rknn-letterbox-gil-ab-20260813.md`](reports/rknn-letterbox-gil-ab-20260813.md)、
+[`../platforms/rk3576/results/rk3576-letterbox-gil-ab-20260813.json`](../platforms/rk3576/results/rk3576-letterbox-gil-ab-20260813.json)
+与
+[`../platforms/rk3588/results/rk3588-letterbox-gil-ab-20260813.json`](../platforms/rk3588/results/rk3588-letterbox-gil-ab-20260813.json)。
 
 ## 可审计产物
 

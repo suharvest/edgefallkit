@@ -3,8 +3,12 @@ import sys
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from video_source import FallbackVideoSource, validate_backend_config
+from video_source import (FallbackVideoSource, aspect_fit_geometry,
+                          copy_strided_rgb_to_letterbox, pad_scaled_rgb,
+                          validate_backend_config)
 
 
 class FakeSource:
@@ -24,6 +28,46 @@ class FakeSource:
 
 
 class BackendAndComposeTest(unittest.TestCase):
+    def test_aspect_fit_geometry_matches_offline_letterbox(self):
+        expected = {
+            (1280, 720): (640, 360, 0, 140),
+            (640, 480): (640, 480, 0, 80),
+            (640, 640): (640, 640, 0, 0),
+        }
+        for source, geometry in expected.items():
+            with self.subTest(source=source):
+                self.assertEqual(aspect_fit_geometry(*source, 640), geometry)
+
+    def test_scaled_rgb_is_padded_without_stretch_or_extra_frame_copy(self):
+        for source_w, source_h in ((1280, 720), (640, 480), (640, 640)):
+            with self.subTest(source=(source_w, source_h)):
+                scaled_w, scaled_h, left, top = aspect_fit_geometry(
+                    source_w, source_h, 640)
+                scaled = np.zeros((scaled_h, scaled_w, 3), dtype=np.uint8)
+                scaled[0, 0] = (1, 2, 3)
+                scaled[-1, -1] = (4, 5, 6)
+                canvas = pad_scaled_rgb(scaled, 640)
+                self.assertEqual(canvas.shape, (640, 640, 3))
+                self.assertEqual(canvas.dtype, np.uint8)
+                np.testing.assert_array_equal(canvas[top, left], (1, 2, 3))
+                np.testing.assert_array_equal(
+                    canvas[top + scaled_h - 1, left + scaled_w - 1], (4, 5, 6))
+                if top:
+                    self.assertTrue(np.all(canvas[:top] == 114))
+                    self.assertTrue(np.all(canvas[top + scaled_h:] == 114))
+
+    def test_strided_mapped_rgb_is_copied_once_into_owned_canvas(self):
+        width, height, stride = 5, 3, 20
+        mapped = bytearray(stride * height)
+        view = np.ndarray((height, width, 3), dtype=np.uint8, buffer=mapped,
+                          strides=(stride, 3, 1))
+        view[:] = (7, 8, 9)
+        canvas = copy_strided_rgb_to_letterbox(mapped, width, height, stride, 8)
+        mapped[:] = b"\x00" * len(mapped)
+        np.testing.assert_array_equal(canvas[2, 1], (7, 8, 9))
+        self.assertTrue(np.all(canvas[:2] == 114))
+        self.assertTrue(np.all(canvas[5:] == 114))
+
     def test_video_fallback_after_configured_failures(self):
         primary = FakeSource("gstreamer_mpp", [None, None])
         fallback = FakeSource("opencv_ffmpeg", ["frame"])

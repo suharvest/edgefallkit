@@ -1,0 +1,13 @@
+{
+  "device": "radxa",
+  "soc": "RK3588",
+  "date": "2026-08-13",
+  "coexistence": ["openvoicestream", "ovs-llm", "ovs-agent", "wyoming-slv"],
+  "source": "rtsp://spark:8554/fall-e2e (H.264, 1280x720, 15 fps)",
+  "video_contract": {"backend": "gstreamer_mpp", "negotiated_size": [640, 360], "output_size": [640, 640], "pad": [0, 140], "pad_value": 114, "pass": true, "wall_fps": 15.0252, "cpu_ms_per_frame": 7.0302, "max_rss_kib": 71612},
+  "old_video_result": {"pass": false, "error": "GStreamer not-negotiated for 1280x720 because old pipeline forced 640x640"},
+  "square_640_ab": {"old": {"fps": 14.9978, "cpu_ms_per_frame": 5.6581, "max_rss_kib": 70948}, "new": {"fps": 15.0144, "cpu_ms_per_frame": 6.5683, "max_rss_kib": 72392}},
+  "rknn_cpp_2ctx_200_ab": {"old": {"throughput_fps": 37.3417, "inference_ms_mean": 52.5420, "pipeline_ms_mean": 53.0537, "max_rss_kib": 288768}, "gil_release": {"throughput_fps": 38.1621, "inference_ms_mean": 51.6304, "pipeline_ms_mean": 51.9791, "max_rss_kib": 296060}},
+  "mqtt_e2e_200": {"contract_pass": 200, "contract_fail": 0, "mqtt_fps": 10.3459, "source_backend": "gstreamer_mpp", "postprocess_backend": "cpp", "inference_ms": {"mean": 54.1796, "p50": 48.503, "p95": 85.605, "max": 162.395}, "pipeline_ms": {"mean": 54.4501, "p50": 48.694, "p95": 85.8, "max": 163.263}},
+  "notes": ["Existing voice/LLM services were not stopped, so RK3588 NPU tails are coexistence results.", "15 fps video results are source-rate capped.", "MQTT fps includes broker startup in this minimal collector and is not a camera throughput metric."]
+}

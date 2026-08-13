@@ -8,6 +8,41 @@ import cv2
 import numpy as np
 
 
+def aspect_fit_geometry(source_w: int, source_h: int, size: int = 640):
+    """Return the exact resize/pad geometry used by the offline extractor."""
+    if source_w <= 0 or source_h <= 0 or size <= 0:
+        raise ValueError("source dimensions and size must be positive")
+    scale = min(size / source_w, size / source_h)
+    scaled_w = int(round(source_w * scale))
+    scaled_h = int(round(source_h * scale))
+    return scaled_w, scaled_h, (size - scaled_w) // 2, (size - scaled_h) // 2
+
+
+def pad_scaled_rgb(scaled: np.ndarray, size: int = 640, color: int = 114):
+    """Copy an already aspect-fitted RGB image into a square letterbox canvas."""
+    if scaled.dtype != np.uint8 or scaled.ndim != 3 or scaled.shape[2] != 3:
+        raise ValueError("scaled image must be HWC uint8 RGB")
+    height, width = scaled.shape[:2]
+    if width > size or height > size:
+        raise ValueError("scaled image does not fit the letterbox canvas")
+    left, top = (size - width) // 2, (size - height) // 2
+    canvas = np.full((size, size, 3), color, dtype=np.uint8)
+    canvas[top:top + height, left:left + width] = scaled
+    return canvas
+
+
+def copy_strided_rgb_to_letterbox(data, width: int, height: int, stride: int,
+                                  size: int = 640, color: int = 114):
+    """Copy mapped, potentially aligned RGB rows into an owned letterbox."""
+    if width <= 0 or height <= 0 or stride < width * 3:
+        raise ValueError("invalid mapped RGB dimensions or stride")
+    if len(data) < stride * height:
+        raise ValueError("mapped RGB buffer is shorter than its negotiated layout")
+    borrowed = np.ndarray((height, width, 3), dtype=np.uint8, buffer=data,
+                          strides=(stride, 3, 1))
+    return pad_scaled_rgb(borrowed, size, color)
+
+
 class FFmpegRTSP:
     backend_name = "opencv_ffmpeg"
 
@@ -32,11 +67,9 @@ class FFmpegRTSP:
             self.close()
             return None
         h, w = bgr.shape[:2]
-        scale = min(self.size / w, self.size / h)
-        nw, nh = int(round(w * scale)), int(round(h * scale))
+        nw, nh, left, top = aspect_fit_geometry(w, h, self.size)
         resized = cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
         canvas = np.full((self.size, self.size, 3), 114, np.uint8)
-        left, top = (self.size - nw) // 2, (self.size - nh) // 2
         canvas[top:top + nh, left:left + nw] = resized
         return cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
 
@@ -62,6 +95,8 @@ class GStreamerMPP:
         self.timeout_ns = int(appsink_timeout_ms) * 1_000_000
         self.pipeline = self.sink = self.bus = None
         self.Gst = None
+        self.GstVideo = None
+        self._scaled_size = None
 
     def _make(self, factory, name):
         element = self.Gst.ElementFactory.make(factory, name)
@@ -74,13 +109,15 @@ class GStreamerMPP:
             import gi
             gi.require_version("Gst", "1.0")
             gi.require_version("GstRtsp", "1.0")
-            from gi.repository import Gst, GstRtsp
+            gi.require_version("GstVideo", "1.0")
+            from gi.repository import Gst, GstRtsp, GstVideo
         except Exception as exc:
             raise RuntimeError("PyGObject GStreamer bindings are unavailable") from exc
         if self.codec not in ("h264", "h265"):
             raise ValueError(f"unsupported RTSP codec for MPP: {self.codec}")
         Gst.init(None)
         self.Gst = Gst
+        self.GstVideo = GstVideo
         pipeline = Gst.Pipeline.new("rknn-rtsp")
         source = self._make("rtspsrc", "source")
         depay = self._make(f"rtp{self.codec}depay", "depay")
@@ -94,11 +131,15 @@ class GStreamerMPP:
         source.set_property("protocols", GstRtsp.RTSPLowerTrans.TCP if self.transport == "tcp"
                             else GstRtsp.RTSPLowerTrans.UDP)
         decoder.set_property("fast-mode", True)
-        decoder.set_property("width", self.size)
-        decoder.set_property("height", self.size)
+        # The parser's first CAPS event supplies coded source dimensions.  Its
+        # probe below sets an aspect-fitted MPP/RGA output size before decoder
+        # negotiation.  Leaving zero here preserves the source if CAPS lacks
+        # dimensions, which is safe and handled by the read-side fallback.
+        decoder.set_property("width", 0)
+        decoder.set_property("height", 0)
         decoder.set_property("format", 15)  # GstMppVideoDecFormat RGB, verified on both boards.
         capsfilter.set_property("caps", Gst.Caps.from_string(
-            f"video/x-raw,format=RGB,width={self.size},height={self.size}"))
+            "video/x-raw,format=RGB"))
         sink.set_property("sync", False)
         sink.set_property("max-buffers", 1)
         sink.set_property("drop", True)
@@ -107,6 +148,27 @@ class GStreamerMPP:
             pipeline.add(element)
         if not depay.link(parser) or not parser.link(decoder) or not decoder.link(capsfilter) or not capsfilter.link(sink):
             raise RuntimeError("failed to link MPP GStreamer pipeline")
+
+        def on_parser_event(_pad, probe_info):
+            event = probe_info.get_event()
+            if event is None or event.type != Gst.EventType.CAPS:
+                return Gst.PadProbeReturn.OK
+            caps = event.parse_caps()
+            structure = caps.get_structure(0) if caps and caps.get_size() else None
+            if structure is None:
+                return Gst.PadProbeReturn.OK
+            ok_w, source_w = structure.get_int("width")
+            ok_h, source_h = structure.get_int("height")
+            if ok_w and ok_h and source_w > 0 and source_h > 0:
+                scaled_w, scaled_h, _, _ = aspect_fit_geometry(
+                    source_w, source_h, self.size)
+                decoder.set_property("width", scaled_w)
+                decoder.set_property("height", scaled_h)
+                self._scaled_size = (scaled_w, scaled_h)
+            return Gst.PadProbeReturn.OK
+
+        parser.get_static_pad("src").add_probe(
+            Gst.PadProbeType.EVENT_DOWNSTREAM, on_parser_event)
 
         expected_encoding = self.codec.upper()
         def on_pad_added(_source, pad):
@@ -147,15 +209,35 @@ class GStreamerMPP:
             if error:
                 raise error
             return None
-        caps = sample.get_caps().get_structure(0)
-        width, height = caps.get_value("width"), caps.get_value("height")
+        sample_caps = sample.get_caps()
+        caps = sample_caps.get_structure(0)
+        width, height = int(caps.get_value("width")), int(caps.get_value("height"))
         buffer = sample.get_buffer()
         ok, mapped = buffer.map(self.Gst.MapFlags.READ)
         if not ok:
             raise RuntimeError("failed to map GStreamer appsink buffer")
         try:
-            expected = width * height * 3
-            frame = np.frombuffer(mapped.data, dtype=np.uint8, count=expected).reshape(height, width, 3).copy()
+            # Respect the negotiated row stride.  MPP/RGA often aligns RGB
+            # rows, so treating the buffer as tightly packed can shear pixels.
+            video_info = self.GstVideo.VideoInfo.new_from_caps(sample_caps)
+            stride = int(video_info.stride[0])
+            if stride < width * 3 or len(mapped.data) < stride * height:
+                raise RuntimeError("invalid RGB stride from mppvideodec")
+            mapped_rgb = np.ndarray((height, width, 3), dtype=np.uint8,
+                                    buffer=mapped.data, strides=(stride, 3, 1))
+            if width <= self.size and height <= self.size:
+                # One required copy: directly from borrowed Gst memory into the
+                # owned letterbox canvas.  No mapped view escapes buffer.unmap().
+                frame = copy_strided_rgb_to_letterbox(
+                    mapped.data, width, height, stride, self.size)
+            else:
+                # Some streams omit coded dimensions in parser CAPS.  Preserve
+                # correctness by software aspect-fit instead of stretching.
+                scaled_w, scaled_h, _, _ = aspect_fit_geometry(
+                    width, height, self.size)
+                scaled = cv2.resize(mapped_rgb, (scaled_w, scaled_h),
+                                    interpolation=cv2.INTER_LINEAR)
+                frame = pad_scaled_rgb(scaled, self.size)
         finally:
             buffer.unmap(mapped)
         return frame
@@ -164,6 +246,7 @@ class GStreamerMPP:
         if self.pipeline is not None:
             self.pipeline.set_state(self.Gst.State.NULL)
         self.pipeline = self.sink = self.bus = None
+        self._scaled_size = None
 
 
 class FallbackVideoSource:

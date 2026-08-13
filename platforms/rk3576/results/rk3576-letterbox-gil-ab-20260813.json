@@ -1,0 +1,12 @@
+{
+  "device": "cat-remote",
+  "soc": "RK3576",
+  "date": "2026-08-13",
+  "source": "rtsp://spark:8554/fall-e2e (H.264, 1280x720, 15 fps)",
+  "video_contract": {"backend": "gstreamer_mpp", "negotiated_size": [640, 360], "output_size": [640, 640], "pad": [0, 140], "pad_value": 114, "pass": true, "wall_fps": 15.0036, "cpu_ms_per_frame": 14.744, "max_rss_kib": 73088},
+  "old_video_result": {"pass": false, "error": "GStreamer not-negotiated for 1280x720 because old pipeline forced 640x640"},
+  "square_640_ab": {"old": {"fps": 14.9681, "cpu_ms_per_frame": 17.0133, "max_rss_kib": 69792}, "new": {"fps": 15.0007, "cpu_ms_per_frame": 18.2412, "max_rss_kib": 72388}},
+  "rknn_cpp_2ctx_200_ab": {"old": {"throughput_fps": 29.5951, "inference_ms_mean": 66.4626, "pipeline_ms_mean": 66.9667, "max_rss_kib": 293032}, "gil_release": {"throughput_fps": 29.4193, "inference_ms_mean": 66.9087, "pipeline_ms_mean": 67.3792, "max_rss_kib": 291880}},
+  "mqtt_e2e_200": {"contract_pass": 200, "contract_fail": 0, "mqtt_fps": 3.724, "source_backend": "gstreamer_mpp", "postprocess_backend": "cpp", "inference_ms": {"mean": 62.4711, "p50": 61.686, "p95": 71.325, "max": 103.356}, "pipeline_ms": {"mean": 63.0862, "p50": 62.222, "p95": 71.677, "max": 104.269}},
+  "notes": ["15 fps video results are source-rate capped.", "MQTT fps includes broker startup in this minimal collector and is not a camera throughput metric.", "GIL release is neutral for empty-frame synthetic inference; its purpose is cross-stream concurrency when postprocess is nontrivial."]
+}

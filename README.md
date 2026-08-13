@@ -21,11 +21,21 @@ runtime images, one-command model preparation, and reproducible performance and
 accuracy evidence. It is an engineering reference implementation, **not a
 medical or emergency-response certification**.
 
+![reCamera Pro live fall-detection demo](assets/demo/recamera-pro-live-fall-demo.gif)
+
+*Live Preview demo using a recorded GMDCSA fall clip and its reCamera Pro
+RV1126B pose trace. The production panel renders the video, tracking box,
+skeleton, and state transition together. State playback is for UI
+visualization; accuracy and performance claims come from the frozen evaluation
+reports below.*
+
+[Demo provenance and source hashes](assets/demo/README.md)
+
 ![reCamera Pro fall-detection debug-panel demo](assets/demo/recamera-pro-debug-fall-demo.gif)
 
-*Synthetic UI demo using the production reCamera Pro debug panel and WebSocket
-result schema. The two-person state sequence is injected for visualization; it
-is not accuracy or performance evidence.*
+*Debug-panel demo using the production reCamera Pro WebSocket result schema.
+The two-person state sequence is injected for visualization; it is not accuracy
+or performance evidence.*
 
 ## Highlights
 

@@ -77,61 +77,69 @@ static py::list decode_pose(py::iterable outputs, float confidence, float nms_th
     if (boxes.size() != classes.size() || boxes.size() != keypoints.size())
         throw std::invalid_argument("expected matched 64/1/51-channel RKNN outputs");
 
-    std::vector<Detection> detections;
-    for (size_t level = 0; level < boxes.size(); ++level) {
-        const Tensor& bd = boxes[level];
-        const Tensor& cl = classes[level];
-        const Tensor& kp = keypoints[level];
-        if (bd.h != cl.h || bd.w != cl.w || bd.h != kp.h || bd.w != kp.w)
-            throw std::invalid_argument("output spatial shapes do not match");
-        float min_score = 0.0f, max_score = 0.0f;
-        const ssize_t count = bd.h * bd.w;
-        for (ssize_t i = 0; i < count; ++i) {
-            min_score = std::min(min_score, cl.at(0, i));
-            max_score = std::max(max_score, cl.at(0, i));
-        }
-        bool logits = min_score < 0.0f || max_score > 1.0f;
-        float stride = static_cast<float>(input_size) / static_cast<float>(bd.h);
-        for (ssize_t i = 0; i < count; ++i) {
-            float score = cl.at(0, i);
-            if (logits) score = sigmoid(score);
-            if (score < confidence) continue;
-            float gx = static_cast<float>(i % bd.w);
-            float gy = static_cast<float>(i / bd.w);
-            std::array<float, 4> dist{};
-            for (int side = 0; side < 4; ++side) {
-                float peak = -INFINITY;
-                for (int bin = 0; bin < 16; ++bin) peak = std::max(peak, bd.at(side * 16 + bin, i));
-                float sum = 0.0f, weighted = 0.0f;
-                for (int bin = 0; bin < 16; ++bin) {
-                    float e = std::exp(bd.at(side * 16 + bin, i) - peak);
-                    sum += e; weighted += e * static_cast<float>(bin);
-                }
-                dist[side] = weighted / sum;
-            }
-            Detection d;
-            d.score = score;
-            d.box = {{(gx + .5f - dist[0]) * stride, (gy + .5f - dist[1]) * stride,
-                      (gx + .5f + dist[2]) * stride, (gy + .5f + dist[3]) * stride}};
-            for (int k = 0; k < 17; ++k) {
-                d.keypoints[k] = {{(kp.at(k * 3, i) * 2.0f + gx - .5f) * stride,
-                                   (kp.at(k * 3 + 1, i) * 2.0f + gy - .5f) * stride,
-                                   sigmoid(kp.at(k * 3 + 2, i))}};
-            }
-            detections.push_back(d);
-        }
-    }
-
-    std::sort(detections.begin(), detections.end(), [](const Detection& a, const Detection& b) {
-        return a.score > b.score;
-    });
     std::vector<Detection> keep;
-    for (const Detection& candidate : detections) {
-        bool suppressed = false;
-        for (const Detection& accepted : keep) {
-            if (iou(candidate, accepted) > nms_threshold) { suppressed = true; break; }
+    {
+        // NumPy owns the tensor storage for the duration of this call.  Once
+        // the arrays have been validated and their data pointers captured, the
+        // numeric DFL/keypoint decode and NMS do not touch Python objects.
+        // Releasing the GIL here lets independent stream workers postprocess in
+        // parallel; it is reacquired before constructing Python result lists.
+        py::gil_scoped_release release;
+        std::vector<Detection> detections;
+        for (size_t level = 0; level < boxes.size(); ++level) {
+            const Tensor& bd = boxes[level];
+            const Tensor& cl = classes[level];
+            const Tensor& kp = keypoints[level];
+            if (bd.h != cl.h || bd.w != cl.w || bd.h != kp.h || bd.w != kp.w)
+                throw std::invalid_argument("output spatial shapes do not match");
+            float min_score = 0.0f, max_score = 0.0f;
+            const ssize_t count = bd.h * bd.w;
+            for (ssize_t i = 0; i < count; ++i) {
+                min_score = std::min(min_score, cl.at(0, i));
+                max_score = std::max(max_score, cl.at(0, i));
+            }
+            bool logits = min_score < 0.0f || max_score > 1.0f;
+            float stride = static_cast<float>(input_size) / static_cast<float>(bd.h);
+            for (ssize_t i = 0; i < count; ++i) {
+                float score = cl.at(0, i);
+                if (logits) score = sigmoid(score);
+                if (score < confidence) continue;
+                float gx = static_cast<float>(i % bd.w);
+                float gy = static_cast<float>(i / bd.w);
+                std::array<float, 4> dist{};
+                for (int side = 0; side < 4; ++side) {
+                    float peak = -INFINITY;
+                    for (int bin = 0; bin < 16; ++bin) peak = std::max(peak, bd.at(side * 16 + bin, i));
+                    float sum = 0.0f, weighted = 0.0f;
+                    for (int bin = 0; bin < 16; ++bin) {
+                        float e = std::exp(bd.at(side * 16 + bin, i) - peak);
+                        sum += e; weighted += e * static_cast<float>(bin);
+                    }
+                    dist[side] = weighted / sum;
+                }
+                Detection d;
+                d.score = score;
+                d.box = {{(gx + .5f - dist[0]) * stride, (gy + .5f - dist[1]) * stride,
+                          (gx + .5f + dist[2]) * stride, (gy + .5f + dist[3]) * stride}};
+                for (int k = 0; k < 17; ++k) {
+                    d.keypoints[k] = {{(kp.at(k * 3, i) * 2.0f + gx - .5f) * stride,
+                                       (kp.at(k * 3 + 1, i) * 2.0f + gy - .5f) * stride,
+                                       sigmoid(kp.at(k * 3 + 2, i))}};
+                }
+                detections.push_back(d);
+            }
         }
-        if (!suppressed) keep.push_back(candidate);
+
+        std::sort(detections.begin(), detections.end(), [](const Detection& a, const Detection& b) {
+            return a.score > b.score;
+        });
+        for (const Detection& candidate : detections) {
+            bool suppressed = false;
+            for (const Detection& accepted : keep) {
+                if (iou(candidate, accepted) > nms_threshold) { suppressed = true; break; }
+            }
+            if (!suppressed) keep.push_back(candidate);
+        }
     }
 
     py::list result;

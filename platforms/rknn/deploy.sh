@@ -36,8 +36,8 @@ platform_dir=$(CDPATH='' cd -- "$script_dir/../$platform" && pwd)
 models=${models_dir:-$platform_dir/models}
 pose=yolo11n_pose_rawhead_fp16.$platform.rknn
 temporal=temporal-$platform.npz
-image=sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1
-digest=sha256:e13c0d3bac963ac78b2d067deee6880aa3058e65f41c700af1b1718129685dc7
+image=sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2
+digest=sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8
 fleet=${FLEET_BIN:-$HOME/.rpty/bin/fleet}
 
 set -- sh "$script_dir/prepare_model.sh" --platform "$platform" --output-dir "$models" --accept-upstream-license

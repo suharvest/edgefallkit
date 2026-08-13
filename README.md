@@ -98,7 +98,7 @@ production defaults.
 | Platform | Control plane | Accelerated path | Deployment status |
 |---|---|---|---|
 | Jetson Orin Nano/NX | Python | NVDEC/VIC → CUDA preprocess → TensorRT 10.3 | Published RC1; Nano/NX pull-back verified |
-| RK3576/RK3588 | Python | MPP/RGA → RKNNLite → pybind11 decode/NMS | Published RC1; both boards pull-back verified |
+| RK3576/RK3588 | Python | MPP/RGA → RKNNLite → pybind11 decode/NMS | Published RC2; both boards pull-back verified |
 | Raspberry Pi 5 + Hailo-8 | Native runtime; Python-control migration documented | GStreamer → `hailonet` → native tensor decode | Published RC1; Pi pull-back verified |
 | reCamera SG2002 | Native C++ | CVI Runtime INT8 | appMgr package; OS 0.2.2 verified |
 | reCamera Pro | Python app | RV1126B RKNN | Signed package, live target, and frozen native/fallback S4 comparison verified |
@@ -176,7 +176,7 @@ throughput artifact, not the current application ABI.
 | Runtime | Published image | Immutable RepoDigest |
 |---|---|---|
 | Jetson | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1` | `sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff` |
-| RKNN | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1` | `sha256:e13c0d3bac963ac78b2d067deee6880aa3058e65f41c700af1b1718129685dc7` |
+| RKNN | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2` | `sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8` |
 | Hailo | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1` | `sha256:1243fb26141a43f67434e1954e6f7ff227e27b8de8aabe2a50a0e3cb48f823a0` |
 
 All three are Linux/ARM64 and were pulled back on their target devices. Models

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "project": "EdgeFallKit",
+  "version": "0.1.0-rc2",
+  "released_at": "2026-08-14",
+  "mqtt_contract": "v1",
+  "images": {
+    "jetson": {
+      "reference": "sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1",
+      "digest": "sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff",
+      "platform": "linux/arm64",
+      "models_embedded": false
+    },
+    "rknn": {
+      "reference": "sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2",
+      "digest": "sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8",
+      "platform": "linux/arm64",
+      "models_embedded": false,
+      "runtime_image_size_bytes": 257794493,
+      "features": [
+        "MPP/RGA aspect-fit letterbox",
+        "stride-aware appsink copy",
+        "pybind11 pose decode/NMS with released GIL"
+      ]
+    },
+    "hailo": {
+      "reference": "sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1",
+      "digest": "sha256:1243fb26141a43f67434e1954e6f7ff227e27b8de8aabe2a50a0e3cb48f823a0",
+      "platform": "linux/arm64",
+      "models_embedded": false
+    }
+  },
+  "model_policy": {
+    "distribution": "external-upstream",
+    "license_acceptance_required": true,
+    "provenance_manifest_required": true,
+    "notes": "Apache-2.0 covers original project code and documentation only. Upstream models and converted artifacts retain their own terms."
+  }
+}

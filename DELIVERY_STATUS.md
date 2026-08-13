@@ -12,8 +12,8 @@ frontend, split and temporal-gate/deployed-state-machine scope.
 | Platform | Runtime and configuration | Deployment mechanism | Required external artifact | Current verification |
 |---|---|---|---|---|
 | Jetson Orin Nano/NX | Complete | slim Docker Compose; published RC1 | target-built SM87/TRT 10.3 pose engine from the explicit-license preparation helper | registry pull-back on Nano/NX, app/config smoke, Spark LAN RTSP, positive fall path, and MQTT v1 contract verified |
-| RK3576 | Complete | Docker Compose; published RC1 | RK3576 `.rknn` (license HOLD) and native temporal `.npz` | registry pull-back, app/config smoke, MPP/RGA RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
-| RK3588 | Complete | Docker Compose; published RC1 | RK3588 `.rknn` (license HOLD) and native temporal `.npz` | registry pull-back, app/config smoke, MPP/RGA RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
+| RK3576 | Complete | Docker Compose; published RC2 | RK3576 `.rknn` (license HOLD) and native temporal `.npz` | RC2 registry pull-back/config validation, MPP/RGA aspect-fit RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
+| RK3588 | Complete | Docker Compose; published RC2 | RK3588 `.rknn` (license HOLD) and native temporal `.npz` | RC2 registry pull-back/config validation, MPP/RGA aspect-fit RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
 | Raspberry Pi 5 + Hailo-8 | Complete | Docker Compose; published RC1 | Hailo-8 `yolov8s_pose.hef` from official URL | registry pull-back, metadata smoke, single/dual RTSP, positive fall path, and MQTT v1 contract verified |
 | reCamera SG2002 | Complete in canonical repository | appMgr `.deb` | packaged CVI model | OS 0.2.2 live deployment, multi-person MQTT, and historical frozen accuracy verified |
 | reCamera Pro | Complete in canonical repository | signed Pro app package | packaged RV1126B RKNN model and production fallback profile | firmware V1.0.4 appMgr install/signature verification, live camera/NPU/WebSocket, 60 s performance and strict native/fallback S4 comparison verified |
@@ -39,10 +39,10 @@ with immutable RepoDigest
 Compose uses this tag by default and supports the `FALL_HAILO_IMAGE` override.
 
 The shared Rockchip ARM64 release is
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1`
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2`
 with immutable RepoDigest
-`sha256:e13c0d3bac963ac78b2d067deee6880aa3058e65f41c700af1b1718129685dc7`.
-Both RK3576 and RK3588 pulled and smoke-tested that digest. Compose resolution
+`sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`.
+Both RK3576 and RK3588 pulled and validated that digest. Compose resolution
 with `FALL_RK_IMAGE` set to this exact tag passed on both platform files.
 
 1. Copy or build the platform-specific accelerator artifact described in the
@@ -58,9 +58,9 @@ with `FALL_RK_IMAGE` set to this exact tag passed on both platform files.
 
 ## Remaining, non-blocking validation work
 
-- Optimize the Pro RGA preprocessing path and rerun the same-trace comparison;
-  the first native candidate overfit S3 and was not promoted over the stronger
-  production fallback.
+- Re-run the Pro native temporal candidate after the independently deployed RGA
+  preprocessing update; the current production temporal profile remains the
+  stronger validated fallback.
 - Evaluate the RK3576, RK3588 and Hailo-8 frozen profiles on RealBiomFall; no
   external-set result is currently claimed for these three frontends.
 
@@ -68,15 +68,14 @@ The split is fixed: Subjects 1–2 fit, Subject 3 selects hyperparameters,
 Subjects 1–3 refit, and Subject 4 is read only by the frozen test command.
 RK3576, RK3588 and Hailo-8 completed this protocol independently on 2026-08-13.
 
-The shared RKNN 2.4.0 ARM64 image is 257,793,213 bytes by device-side inspect
-and 255,849,560 bytes as `docker save | gzip -1`; the same SHA256-verified
-artifact passed runtime smoke on both RK3576 and RK3588. Compose mounts the
+The shared RKNN 2.5.0 RC2 ARM64 image is 257,794,493 bytes by registry-pulled
+device-side inspect. The same immutable digest and code hashes passed pull-back
+and configuration validation on RK3576 and RK3588. Compose mounts the
 verified host Rockchip MPP/RGA and H.264/H.265 parser ABI. The runtime contains
 no compiler, pybind11 headers/module/cache or model; only the stripped native
 postprocess `.so` crosses from the builder. Local tests are 12/12, including
 real C++/NumPy parity for NCHW/NHWC plus backend/config/Compose fallback tests.
-Registry-pulled Docker v2 inspect reports 258,898,465 bytes; its RootFS layers
-match the audited local OCI artifact. The image contains no model. The two
+The image contains no model. The two
 YOLO11n-Pose RKNN artifacts remain release HOLD until Ultralytics AGPL-3.0
 suitability or a commercial model license is documented.
 
@@ -102,4 +101,5 @@ suitability or a commercial model license is documented.
 - Dataset/model/trace locations: `assets/ASSET_LOCATIONS.md`
 - Jetson ONNX restore/export: `platforms/jetson/models/README.md`
 - Hailo fixed HEF download: `platforms/rpi-hailo/scripts/fetch_model.sh`
-- Machine-readable RC manifest: `release/0.1.0-rc1.json`
+- Machine-readable current RC manifest: `release/0.1.0-rc2.json`
+- Historical RC1 manifest: `release/0.1.0-rc1.json`

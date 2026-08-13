@@ -51,7 +51,7 @@ The scripts first validate `models/SHA256SUMS`. A matching pose model is a
 cache hit: no model download or conversion occurs. The small platform-native
 `temporal-rk3576.npz`/`temporal-rk3588.npz` files ship with the project. The
 deployment then uses Fleet to push the pose and temporal artifacts plus config
-and Compose, pulls the immutable RC1 runtime, verifies its RepoDigest, runs
+and Compose, pulls the immutable RC2 runtime, verifies its RepoDigest, runs
 `docker compose config` and `app.py --validate`, and finally runs
 `docker compose up -d`. Add `--no-up` to stop after validation or `--dry-run`
 to print every planned operation.
@@ -230,10 +230,10 @@ resolved `rtspsrc`, `rtph264depay`, `h264parse`, `mppvideodec` and `appsink`
 inside the final container.
 
 Release candidate `0.1.0-rc1` is published at
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1`.
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2`.
 Both `cat-remote` and `radxa` pulled it independently and resolved the immutable
 RepoDigest
-`sha256:e13c0d3bac963ac78b2d067deee6880aa3058e65f41c700af1b1718129685dc7`.
+`sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`.
 Registry-pulled inspect reports 258,898,465 bytes. Its ten RootFS layer digests
 match the locally audited artifact; the registry's Docker v2 manifest versus
 the local OCI index accounts for the different top-level ID/size accounting.

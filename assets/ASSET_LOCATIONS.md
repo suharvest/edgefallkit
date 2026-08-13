@@ -17,7 +17,7 @@ the evaluated working/debug machine; Spark is the durable backup.
 | RK LAN E2E raw MQTT/summary | Mac `/private/tmp/rk*-spark-*` | `/home/harvest/datasets/fall-detection/evaluation/rk-e2e/20260813/` |
 | RK3576 GMDCSA working copy/traces | `cat-remote:/home/cat/fall-detection-data/{gmdcsa24,traces/rk3576}` | traces `/home/harvest/datasets/fall-detection/traces/rk3576/`; profile/reports `/home/harvest/datasets/fall-detection/rk-training/rk3576/` |
 | RK3588 GMDCSA working copy/traces | `radxa:/home/radxa/fall-detection-data/{gmdcsa24,traces/rk3588}` | traces `/home/harvest/datasets/fall-detection/traces/rk3588/`; profile/reports `/home/harvest/datasets/fall-detection/rk-training/rk3588/` |
-| RK shared ARM64 runtime image | local source `fall-detection-rknn:2.4.0` on RK boards | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1` |
+| RK shared ARM64 runtime image | local source `fall-detection-rknn:2.5.0` on RK3588 | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2` |
 | Hailo-8 YOLOv8s-Pose 160 traces | Pi temporary extraction tree `/tmp/hailo-gmdcsa-traces/` | `/home/harvest/datasets/fall-detection/traces/hailo8-yolov8s-pose/` |
 | Hailo-8 frozen temporal profile/reports | local small copies under `evaluation/reports/` | `/home/harvest/datasets/fall-detection/profiles/hailo8-yolov8s-pose-v1/` |
 | Hailo-8 ARM64 runtime image | `fall-detection-rpi-hailo:4.21` build source on Pi | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1` |
@@ -159,7 +159,7 @@ The project does not re-host or assert redistribution rights for that HEF.
 
 The published RK runtime was independently pulled on `cat-remote` and `radxa`.
 Both resolve RepoDigest
-`sha256:e13c0d3bac963ac78b2d067deee6880aa3058e65f41c700af1b1718129685dc7`;
+`sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`;
 registry-pulled inspect reports 258,898,465 bytes. The container contains no
 RKNN pose model. Its external RK3576/RK3588 model files derive from
 Ultralytics YOLO11n-Pose reference weights and are on **license HOLD**: do not

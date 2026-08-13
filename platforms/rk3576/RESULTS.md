@@ -106,8 +106,8 @@ Raw evidence: `results/rk3576-mpp-cpp-low-20260813.ndjson`,
 `rk3576-mpp-cpp-fall-person-20260813.ndjson`, and
 `rk3576-mpp-cpp-fall-person-summary-20260813.json`.
 
-The published RC1 was pulled back on RK3576 with RepoDigest
-`sha256:e13c0d3bac963ac78b2d067deee6880aa3058e65f41c700af1b1718129685dc7`
+The optimized RC2 was pulled back on RK3576 with RepoDigest
+`sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`
 and inspect size 258,898,465 bytes. `app.py --validate` and the complete runtime
 factory/native-postprocess smoke passed without starting or stopping business
 services. The external pose model is not baked and remains license HOLD.

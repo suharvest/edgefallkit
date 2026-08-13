@@ -1,0 +1,43 @@
+{
+  "protocol": "fit S1-2; select S3; refit S1-3; Subject 4 not read",
+  "phase": "configuration_freeze",
+  "platform": "rk3588",
+  "trace_root": "/private/tmp/rk3588-traces",
+  "clips_by_subject": {
+    "1": 32,
+    "2": 48,
+    "3": 43
+  },
+  "window_frames": 48,
+  "stride_frames": 3,
+  "feature_dim": 504,
+  "best": {
+    "variant": "pose",
+    "hidden": 32,
+    "alpha": 0.01,
+    "threshold": 0.7999999999999998,
+    "consecutive": 3,
+    "validation": {
+      "n": 43,
+      "tp": 21,
+      "fn": 0,
+      "tn": 20,
+      "fp": 2,
+      "accuracy": 0.9534883720930233,
+      "recall": 1.0,
+      "specificity": 0.9090909090909091,
+      "precision": 0.9130434782608695,
+      "f1": 0.9545454545454545,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 0.9571428571428572,
+      "median_detection_latency_sec": 0.8999999999999999,
+      "misclassified": [
+        "subject-3/ADL/09.jsonl",
+        "subject-3/ADL/13.jsonl"
+      ]
+    },
+    "validation_f1": 0.9545454545454545,
+    "validation_balanced_accuracy": 0.9545454545454546
+  },
+  "npz": "/Users/harvest/project/fall-detection/platforms/rk3588/models/temporal-rk3588.npz"
+}

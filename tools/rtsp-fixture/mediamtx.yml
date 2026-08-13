@@ -1,0 +1,6 @@
+rtspTransports: [tcp]
+paths:
+  fall-e2e-low:
+    source: publisher
+  fall-person:
+    source: publisher

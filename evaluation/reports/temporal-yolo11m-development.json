@@ -1,0 +1,57 @@
+{
+  "protocol": "fit Subjects 1-2; select on Subject 3; refit Subjects 1-3; no Subject 4",
+  "trace_frontends": [
+    "yolo11m"
+  ],
+  "best": {
+    "variant": "pose",
+    "hidden": 32,
+    "alpha": 0.01,
+    "threshold": 0.7999999999999998,
+    "consecutive": 3,
+    "validation": {
+      "n": 43,
+      "tp": 21,
+      "fn": 0,
+      "tn": 21,
+      "fp": 1,
+      "accuracy": 0.9767441860465116,
+      "recall": 1.0,
+      "specificity": 0.9545454545454546,
+      "precision": 0.9545454545454546,
+      "f1": 0.9767441860465117,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 0.9761904761904762,
+      "median_detection_latency_sec": 0.8999999999999999,
+      "misclassified": [
+        "subject-3/ADL/08.jsonl"
+      ]
+    },
+    "validation_by_frontend": {
+      "yolo11m": {
+        "n": 43,
+        "tp": 21,
+        "fn": 0,
+        "tn": 21,
+        "fp": 1,
+        "accuracy": 0.9767441860465116,
+        "recall": 1.0,
+        "specificity": 0.9545454545454546,
+        "precision": 0.9545454545454546,
+        "f1": 0.9767441860465117,
+        "early_fall_alerts": 0,
+        "mean_detection_latency_sec": 0.9761904761904762,
+        "median_detection_latency_sec": 0.8999999999999999,
+        "misclassified": [
+          "subject-3/ADL/08.jsonl"
+        ]
+      }
+    },
+    "min_frontend_f1": 0.9767441860465117,
+    "validation_f1": 0.9767441860465117,
+    "validation_balanced_accuracy": 0.9772727272727273
+  },
+  "window_frames": 48,
+  "stride_frames": 3,
+  "feature_dim": 504
+}

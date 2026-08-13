@@ -1,0 +1,29 @@
+{
+  "device": "Orin Nano",
+  "power_mode": "MAXN_SUPER",
+  "runtime": "TensorRT 10.3 FP16 SM87",
+  "model": "YOLO11s-Pose",
+  "image": {"id": "ae24d79286d8", "disk_usage_bytes_display": "206MB", "content_size_bytes_display": "51.8MB"},
+  "source": {"host": "spark", "url": "rtsp://192.168.3.42:8554/fall-e2e-low", "codec": "H264 Constrained Baseline", "resolution": "640x640", "fps": 15, "bitrate_mbps": 1.2},
+  "low_stream": {
+    "payloads": 918, "duration_s": 61.3602, "effective_output_fps": 14.9445,
+    "output_interval_ms": {"mean": 66.9141, "p95": 69.6321, "max": 552.4516},
+    "inference_time_ms": {"mean": 14.7616, "p95": 14.79, "max": 47.94},
+    "cpu_percent": {"mean": 11.081, "p95": 11.87, "max": 12.03},
+    "rss_mib": {"mean": 211.2633, "p95": 211.6, "max": 211.6},
+    "gpu_percent": {"mean": 24.8167, "p95": 77.0, "max": 89.0},
+    "vdd_in_w": {"mean": 9.07, "p95": 9.383, "max": 9.586},
+    "mqtt_contract": {"validated_payloads": 918, "result": "pass", "capture": "publisher interception; broker transport not measured"}
+  },
+  "fall_person_stream": {
+    "url": "rtsp://192.168.3.42:8554/fall-person", "clip": "GMDCSA S4 Fall/01 loop",
+    "payloads": 867, "duration_s": 61.4132, "effective_output_fps": 14.1012,
+    "inference_time_ms": {"mean": 14.7591, "p95": 14.8},
+    "person_frames": 663, "tracking_frames": 866, "pose17_frames": 866,
+    "temporal_positive_frames": 573, "fall_event_frames": 2,
+    "global_event_ids": [1, 2], "fallen_frames": 845,
+    "states": ["normal", "fallen", "recovering"], "mqtt_contract_validated_payloads": 867
+  },
+  "caveats": ["P95 is output inter-arrival interval, not source capture-to-MQTT latency.", "The low-stream max interval includes one startup/network stall; frame_id remained contiguous.", "The fall clip loops during the measurement, so event count is a path validation, not an accuracy metric."],
+  "raw_capture_locations": ["/private/tmp/jetson-e2e-spark-nano-20260813", "/private/tmp/jetson-person-nano-20260813"]
+}

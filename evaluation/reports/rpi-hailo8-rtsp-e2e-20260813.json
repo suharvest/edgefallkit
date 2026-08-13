@@ -1,0 +1,133 @@
+{
+  "date": "2026-08-13",
+  "device": "harvest-pi / Raspberry Pi 5 / Hailo-8",
+  "hailort": "4.21.0",
+  "source_host": "Mac via Tailscale for control runs; Spark LAN 192.168.3.42 for person-positive run",
+  "source_profiles": {
+    "control": "H264 Constrained Baseline 640x640@15, CBR approximately 1.2 Mbps, GOP 30, bf=0, repeat headers",
+    "comparison": "H264 1280x720@15; MediaMTX reported reader slow/discard frames"
+  },
+  "next_lan_sources": {
+    "control": "rtsp://192.168.3.42:8554/fall-e2e-low",
+    "person_positive": "rtsp://192.168.3.42:8554/fall-person",
+    "verified_from_pi": "H264 Constrained Baseline 640x640@15; LAN RTT mean 3.96 ms",
+    "status": "person-positive Hailo E2E completed; full native-profile trace extraction remains pending"
+  },
+  "metric_notes": [
+    "pipeline_ms is the pre-hailonet to hailonet-src probe, not source-to-MQTT latency",
+    "ps CPU percent is the process lifetime-average value sampled every 0.5 seconds",
+    "the control cases had person_count=0; the Spark fall-person case validates positive pose/tracker/temporal/event transitions",
+    "power is unavailable because the target exposes no reliable board-power telemetry"
+  ],
+  "cases": {
+    "single_640": {
+      "benchmark_fps_including_startup": 14.3216,
+      "mqtt_messages": 433,
+      "mqtt_contract_valid": 433,
+      "steady_mqtt_fps": 15.0318,
+      "pipeline_ms_mean": 7.7711,
+      "pipeline_ms_p95": 8.3569,
+      "pipeline_ms_max": 17.5212,
+      "cpu_percent_last": 11.5,
+      "cpu_percent_max": 16.9,
+      "rss_kib_mean": 122756.7,
+      "rss_kib_max": 127760,
+      "temperature_c_mean": 58.75,
+      "temperature_c_max": 60.4,
+      "stream_ids": ["mac-e2e-1"]
+    },
+    "dual_640": {
+      "benchmark_fps_including_startup": {
+        "mac-e2e-1": 14.3276,
+        "mac-e2e-2": 14.2950
+      },
+      "mqtt_messages": 878,
+      "mqtt_contract_valid": 878,
+      "steady_mqtt_fps": {
+        "mac-e2e-1": 15.0686,
+        "mac-e2e-2": 15.0397
+      },
+      "pipeline_ms_mean": {
+        "mac-e2e-1": 9.9187,
+        "mac-e2e-2": 9.7566
+      },
+      "pipeline_ms_p95": {
+        "mac-e2e-1": 15.3674,
+        "mac-e2e-2": 15.4281
+      },
+      "pipeline_ms_max": {
+        "mac-e2e-1": 16.3914,
+        "mac-e2e-2": 17.8899
+      },
+      "cpu_percent_last": 22.9,
+      "cpu_percent_max": 23.4,
+      "rss_kib_mean": 172721.6,
+      "rss_kib_max": 182080,
+      "temperature_c_mean": 59.51,
+      "temperature_c_max": 60.9,
+      "stream_ids": ["mac-e2e-1", "mac-e2e-2"]
+    },
+    "single_720p_comparison": {
+      "benchmark_fps_including_startup": 13.4115,
+      "mqtt_messages": 407,
+      "mqtt_contract_valid": 407,
+      "steady_mqtt_fps": 14.1691,
+      "pipeline_ms_mean": 7.8839,
+      "pipeline_ms_p95": 8.5009,
+      "pipeline_ms_max": 18.2642,
+      "cpu_percent_last": 24.8,
+      "cpu_percent_max": 26.3,
+      "rss_kib_mean": 128005.7,
+      "rss_kib_max": 133184,
+      "temperature_c_mean": 58.52,
+      "temperature_c_max": 60.4,
+      "stream_ids": ["mac-e2e-1"],
+      "network_caveat": "MediaMTX reader slow/discard observed; frame loss must not be attributed to Hailo"
+    },
+    "fall_person_lan": {
+      "source": "GMDCSA Subject 4 Fall/01 loop, H264 Constrained Baseline 640x640@15",
+      "benchmark_seconds": 60.0511,
+      "benchmark_fps_including_startup": 14.7208,
+      "mqtt_messages": 884,
+      "mqtt_contract_valid": 884,
+      "steady_mqtt_fps": 15.0183,
+      "pipeline_ms_mean": 7.4758,
+      "pipeline_ms_p95": 8.5284,
+      "pipeline_ms_max": 13.2663,
+      "person_detected_messages": 615,
+      "tracking_messages": 813,
+      "valid_pose17_messages": 615,
+      "temporal_positive_person_messages": 462,
+      "fall_events": 5,
+      "event_id_first_last": [0, 5],
+      "event_ids_monotonic": true,
+      "states": {
+        "normal": 132,
+        "suspected": 38,
+        "fallen": 368,
+        "recovering": 346
+      },
+      "event_invariants": "all five event persons had features.valid=true, pose17 length 17, and temporal_probability=1.0",
+      "cpu_percent_last": 12.5,
+      "cpu_percent_max": 15.0,
+      "rss_kib_mean": 126912.6,
+      "rss_kib_max": 130784,
+      "temperature_c_mean": 58.87,
+      "temperature_c_max": 62.0,
+      "stream_ids": ["spark-fall-person"],
+      "accuracy_caveat": "looped positive functional test; not an independent accuracy sample"
+    }
+  },
+  "service_restore": {
+    "container": "mcp_face_rec",
+    "state_after_test": "healthy"
+  },
+  "runtime_image": {
+    "tag": "fall-detection-rpi-hailo:4.21",
+    "digest": "sha256:d2690f2717959635d5f82171e8d03d4e29e456f4b4930b88697d23ee484d8ab0",
+    "content_size_bytes": 143406131,
+    "docker_disk_usage_bytes": 533000000,
+    "model_baked": false,
+    "hailort_baked": false
+  }
+}

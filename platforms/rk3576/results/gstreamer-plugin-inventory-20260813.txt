@@ -1,0 +1,17 @@
+device: cat-remote (RK3576)
+command basis: gst-inspect-1.0 plus ldd, read-only, 2026-08-13
+gst-inspect binary: /usr/bin/gst-inspect-1.0
+registered Rockchip decoder: rockchipmpp:mppvideodec
+plugin/version: gst-rockchip 1.14.4
+plugin file: /lib/aarch64-linux-gnu/gstreamer-1.0/libgstrockchipmpp.so
+standalone RGA element: none registered
+sink caps used: video/x-h264 and video/x-h265, parsed=true, alignment=au
+source caps: video/x-raw and video/x-raw(memory:DMABuf); includes RGB, BGR, RGBA, NV12
+properties used: width=640, height=640, format=RGB (enum 15)
+plugin dynamic links relevant to acceleration:
+  /lib/aarch64-linux-gnu/librockchip_mpp.so.1
+  /lib/aarch64-linux-gnu/librga.so.2
+host parser ABI mounted by Compose:
+  /lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so
+  /lib/aarch64-linux-gnu/libgstcodecparsers-1.0.so.0
+final-container factories smoke-tested: rtspsrc, rtph264depay, h264parse, mppvideodec, appsink

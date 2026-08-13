@@ -1,0 +1,203 @@
+{
+  "split": "GMDCSA S4 clean frozen test",
+  "clips": 27,
+  "frames": 2981,
+  "valid_pose_frames": 2743,
+  "valid_pose_coverage": 0.9201610197920161,
+  "pose17_frames": 2743,
+  "pose17_coverage": 0.9201610197920161,
+  "tracking_frames": 2743,
+  "tracking_coverage": 0.9201610197920161,
+  "definition": "frame count from emitted trace; valid uses features.valid; smoke clips permanently excluded",
+  "per_clip": [
+    {
+      "clip": "subject-4/ADL/02.jsonl",
+      "frames": 157,
+      "valid": 157,
+      "pose17": 157,
+      "tracking": 157
+    },
+    {
+      "clip": "subject-4/ADL/03.jsonl",
+      "frames": 133,
+      "valid": 133,
+      "pose17": 133,
+      "tracking": 133
+    },
+    {
+      "clip": "subject-4/ADL/04.jsonl",
+      "frames": 195,
+      "valid": 195,
+      "pose17": 195,
+      "tracking": 195
+    },
+    {
+      "clip": "subject-4/ADL/06.jsonl",
+      "frames": 98,
+      "valid": 97,
+      "pose17": 97,
+      "tracking": 97
+    },
+    {
+      "clip": "subject-4/ADL/07.jsonl",
+      "frames": 72,
+      "valid": 63,
+      "pose17": 63,
+      "tracking": 63
+    },
+    {
+      "clip": "subject-4/ADL/08.jsonl",
+      "frames": 184,
+      "valid": 184,
+      "pose17": 184,
+      "tracking": 184
+    },
+    {
+      "clip": "subject-4/ADL/09.jsonl",
+      "frames": 180,
+      "valid": 180,
+      "pose17": 180,
+      "tracking": 180
+    },
+    {
+      "clip": "subject-4/ADL/11.jsonl",
+      "frames": 160,
+      "valid": 160,
+      "pose17": 160,
+      "tracking": 160
+    },
+    {
+      "clip": "subject-4/ADL/12.jsonl",
+      "frames": 128,
+      "valid": 128,
+      "pose17": 128,
+      "tracking": 128
+    },
+    {
+      "clip": "subject-4/ADL/13.jsonl",
+      "frames": 78,
+      "valid": 78,
+      "pose17": 78,
+      "tracking": 78
+    },
+    {
+      "clip": "subject-4/ADL/14.jsonl",
+      "frames": 122,
+      "valid": 122,
+      "pose17": 122,
+      "tracking": 122
+    },
+    {
+      "clip": "subject-4/ADL/16.jsonl",
+      "frames": 107,
+      "valid": 107,
+      "pose17": 107,
+      "tracking": 107
+    },
+    {
+      "clip": "subject-4/ADL/17.jsonl",
+      "frames": 93,
+      "valid": 80,
+      "pose17": 80,
+      "tracking": 80
+    },
+    {
+      "clip": "subject-4/ADL/18.jsonl",
+      "frames": 207,
+      "valid": 207,
+      "pose17": 207,
+      "tracking": 207
+    },
+    {
+      "clip": "subject-4/ADL/19.jsonl",
+      "frames": 136,
+      "valid": 136,
+      "pose17": 136,
+      "tracking": 136
+    },
+    {
+      "clip": "subject-4/Fall/02.jsonl",
+      "frames": 36,
+      "valid": 35,
+      "pose17": 35,
+      "tracking": 35
+    },
+    {
+      "clip": "subject-4/Fall/03.jsonl",
+      "frames": 88,
+      "valid": 74,
+      "pose17": 74,
+      "tracking": 74
+    },
+    {
+      "clip": "subject-4/Fall/04.jsonl",
+      "frames": 67,
+      "valid": 51,
+      "pose17": 51,
+      "tracking": 51
+    },
+    {
+      "clip": "subject-4/Fall/06.jsonl",
+      "frames": 91,
+      "valid": 85,
+      "pose17": 85,
+      "tracking": 85
+    },
+    {
+      "clip": "subject-4/Fall/07.jsonl",
+      "frames": 93,
+      "valid": 86,
+      "pose17": 86,
+      "tracking": 86
+    },
+    {
+      "clip": "subject-4/Fall/08.jsonl",
+      "frames": 93,
+      "valid": 45,
+      "pose17": 45,
+      "tracking": 45
+    },
+    {
+      "clip": "subject-4/Fall/10.jsonl",
+      "frames": 75,
+      "valid": 59,
+      "pose17": 59,
+      "tracking": 59
+    },
+    {
+      "clip": "subject-4/Fall/11.jsonl",
+      "frames": 68,
+      "valid": 25,
+      "pose17": 25,
+      "tracking": 25
+    },
+    {
+      "clip": "subject-4/Fall/12.jsonl",
+      "frames": 69,
+      "valid": 58,
+      "pose17": 58,
+      "tracking": 58
+    },
+    {
+      "clip": "subject-4/Fall/14.jsonl",
+      "frames": 77,
+      "valid": 58,
+      "pose17": 58,
+      "tracking": 58
+    },
+    {
+      "clip": "subject-4/Fall/15.jsonl",
+      "frames": 71,
+      "valid": 71,
+      "pose17": 71,
+      "tracking": 71
+    },
+    {
+      "clip": "subject-4/Fall/16.jsonl",
+      "frames": 103,
+      "valid": 69,
+      "pose17": 69,
+      "tracking": 69
+    }
+  ]
+}

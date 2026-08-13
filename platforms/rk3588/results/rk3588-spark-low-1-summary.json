@@ -1,0 +1,52 @@
+{
+  "collector_command": [
+    "/opt/homebrew/bin/mosquitto_sub",
+    "-h",
+    "127.0.0.1",
+    "-t",
+    "fall-e2e/rk3588/+",
+    "-C",
+    "200",
+    "-W",
+    "90"
+  ],
+  "return_code": 0,
+  "captured_messages": 200,
+  "aggregate_mqtt_observed_fps": 8.564665375511082,
+  "streams": {
+    "cam-01": {
+      "messages": 200,
+      "first_frame_id": 1401,
+      "last_frame_id": 1745,
+      "frame_id_span": 344,
+      "timestamp_span_ms": 23235,
+      "mqtt_observed_fps": 8.564665375511082,
+      "source_frame_id_rate": 14.805250699375941,
+      "missing_frame_ids": 145,
+      "inference_time_ms": {
+        "mean": 54.355,
+        "p50": 48.0,
+        "p95": 76.0,
+        "p99": 92.05999999999995,
+        "max": 139.0
+      },
+      "pipeline_ms": {
+        "mean": 54.75854,
+        "p50": 48.807,
+        "p95": 76.45254999999999,
+        "p99": 92.33995999999993,
+        "max": 139.867
+      },
+      "decoded_frame_to_mqtt_receive_ms": {
+        "mean": 141.135,
+        "p50": 122.0,
+        "p95": 232.20000000000005,
+        "p99": 343.4399999999996,
+        "max": 407.0
+      },
+      "missing_contract_fields": [],
+      "fall_events": 0
+    }
+  },
+  "latency_scope": "pipeline_ms starts after cv2 returns a decoded frame; decoded_frame_to_mqtt_receive_ms adds MQTT delivery and assumes synchronized device/Mac clocks; source encode/network latency is not represented by the payload timestamp"
+}

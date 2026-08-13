@@ -1,0 +1,41 @@
+{
+  "date": "2026-08-13",
+  "device": "harvest-pi",
+  "hardware": "Raspberry Pi 5 + Hailo-8",
+  "hailort_version": "4.21.0",
+  "model": "yolov8s_pose.hef",
+  "model_sha256": "e19856699ed47cf866d23265827f960b263f287dab5e54e82c7ce37e12525a2d",
+  "input": "640x640 RGB",
+  "pure_npu": {
+    "tool": "hailortcli benchmark 4.21.0",
+    "hw_only_fps": 393.318,
+    "streaming_fps": 393.321,
+    "hw_latency_ms": 6.87458,
+    "power": null
+  },
+  "application": {
+    "source": "GStreamer videotestsrc test://ball at 30 FPS; not RTSP end-to-end",
+    "single_stream": {
+      "fps": 29.7689,
+      "mean_pre_hailonet_to_source_ms": 7.80603
+    },
+    "dual_stream": [
+      {"stream_id": "one", "fps": 29.8593, "mean_pre_hailonet_to_source_ms": 7.86936},
+      {"stream_id": "two", "fps": 29.6628, "mean_pre_hailonet_to_source_ms": 7.81042}
+    ],
+    "dual_stream_cpu_percent_snapshot": 38.2,
+    "dual_stream_rss_kib_snapshot": 118480,
+    "temperature_c_snapshot": 60.05
+  },
+  "service_maintenance": {
+    "temporarily_stopped": "mcp_face_rec",
+    "authorized": true,
+    "restored_status": "healthy"
+  },
+  "fall_accuracy": null,
+  "notes": [
+    "The application probe is wider than the accelerator call; inference_time_ms remains unavailable/zero in MQTT.",
+    "Synthetic source throughput is not a real RTSP end-to-end latency measurement.",
+    "COCO pose mAP is not fall-detection accuracy."
+  ]
+}

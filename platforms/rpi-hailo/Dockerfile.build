@@ -1,0 +1,6 @@
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake pkg-config libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    libmosquitto-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+ENTRYPOINT ["sh", "-c", "mkdir -p /src/platforms/rpi-hailo/build && cmake -S /src/platforms/rpi-hailo -B /tmp/build -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/build -j2 && cp /tmp/build/fall-hailo /src/platforms/rpi-hailo/build/fall-hailo && ctest --test-dir /tmp/build --output-on-failure"]

@@ -1,0 +1,18 @@
+{
+  "device": "radxa",
+  "host": "rock-5t",
+  "soc": "rockchip,rk3588",
+  "kernel": "6.1.84-8-rk2410",
+  "runtime": {"librknnrt": "2.3.2 (429f97ae6b@2025-04-09T09:09:27)", "driver": "0.9.8", "toolkit": "2.3.2", "python_rknnlite_path": "/usr/lib/python3/dist-packages/rknnlite"},
+  "model": {"path": "/home/radxa/fall-detection/platforms/rk3588/models/yolo11n_pose_rawhead_fp16.rk3588.rknn", "sha256": "22f00270870b25dc013e4e8e39aed98f82bcabb69b9272302280a6b8b8f48d5c", "size_bytes": 7647051, "input": "static [1,640,640,3] uint8 (benchmark letterboxed blank RGB)"},
+  "npu": {"driver": "RKNPU", "devfreq": "fdab0000.npu", "governor": "rknpu_ondemand", "current_hz": 1000000000, "load_sample": "100@1000000000Hz"},
+  "contention": ["/usr/bin/rknn_server", "RK1828 LLM server --core-mask ff", "voice uvicorn", "ovs-agent"],
+  "benchmarks": [
+    {"contexts": 1, "iterations": 100, "throughput_fps": 19.250232382014136, "inference_ms": {"mean": 51.406088499352336, "p50": 48.17822203040123, "p95": 58.917680056765676, "max": 131.57002395018935}, "pipeline_ms": {"mean": 51.76644954364747, "p50": 48.44772908836603, "p95": 59.282856062054634, "max": 132.87789304740727}, "max_rss_kb": 194408},
+    {"contexts": 2, "iterations": 100, "throughput_fps": 38.13042937042424, "inference_ms": {"mean": 51.42580318963155, "p50": 49.37525512650609, "p95": 56.70591187663376, "max": 73.22023389860988}, "pipeline_ms": {"mean": 51.892453252803534, "p50": 49.76959899067879, "p95": 62.35739798285067, "max": 73.5282429959625}, "max_rss_kb": 222860},
+    {"contexts": 3, "iterations": 100, "throughput_fps": 51.39545078954551, "inference_ms": {"mean": 56.68375664623454, "p50": 53.43244899995625, "p95": 88.01134396344423, "max": 108.39560511521995}, "pipeline_ms": {"mean": 57.28547259699553, "p50": 53.9017531555146, "p95": 92.39958808757365, "max": 110.05902499891818}, "max_rss_kb": 301868}
+  ],
+  "image": {"name": "fall-detection-rknn:2.3.0", "id": "sha256:593ff502fc389b7b6a479ff13627eb0728bce023f3f827e3dff6e6ff49f150e1", "size_bytes": 144143406, "gzip1_bytes": 143349802},
+  "validation": {"compose_config": "pass", "container_validate": {"valid": true, "streams": 1}, "blank_detections": 0},
+  "evidence_files": ["/private/tmp/rk3588-native-1ctx-100.json", "/private/tmp/rk3588-native-2ctx-100.json", "/private/tmp/rk3588-native-3ctx-100.json"]
+}

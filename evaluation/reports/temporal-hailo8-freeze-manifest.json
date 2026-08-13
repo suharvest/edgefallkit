@@ -1,0 +1,9 @@
+{
+  "profile": "hailo8-yolov8s-pose-v1",
+  "freeze_epoch": 1786601538,
+  "protocol": "S1-2 fit; S3 select; S1-3 refit; no S4 label or trace visible before this manifest",
+  "profile_header_sha256": "dec7237a1204cd2d9d54aa6810ca941ef82b83a18e65bb06a4eb7893bb55faf9",
+  "development_report_sha256": "f0577b4c7f121faf580afcbeabcef33532eb9cdeda208ba71dacd6f607dcc40e",
+  "subjects_1_3_trace_manifest_sha256": "b49f398a8f87174bec4d7af8b646ab805cedc2c9375b81ca1acccbb41fb493dc",
+  "hef_sha256": "e19856699ed47cf866d23265827f960b263f287dab5e54e82c7ce37e12525a2d"
+}

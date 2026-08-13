@@ -1,0 +1,26 @@
+{
+  "date": "2026-08-13",
+  "source": {
+    "host": "spark",
+    "performance_path": "rtsp://192.168.3.42:8554/fall-e2e-low",
+    "positive_path": "rtsp://192.168.3.42:8554/fall-person",
+    "codec": "H264 Constrained Baseline",
+    "shape": "640x640",
+    "fps": 15,
+    "bitrate_mbps": 1.2
+  },
+  "latency_scope": "pipeline starts after decoded frame acquisition; decoded-frame-to-MQTT assumes synchronized clocks and excludes source encoding/network delay",
+  "qos0_note": "broker observations contained frame-id gaps; mqtt_observed_fps and source_frame_id_rate are reported separately",
+  "rk3576": {
+    "single": {"mqtt_observed_fps": 4.8840, "source_frame_id_rate": 10.8234, "inference_p95_ms": 94.05, "pipeline_p95_ms": 96.1609, "mqtt_p95_ms": 264.05, "cpu_percent": 64.19, "rss_mib": 178.8, "npu_percent": [30, 0]},
+    "multi": {"streams": 2, "mqtt_observed_fps": [3.8187, 3.7969], "source_frame_id_rate": [9.1458, 9.1662], "inference_p95_ms": [111.0, 109.3], "pipeline_p95_ms": [112.493, 110.9719], "cpu_percent": 94.06, "rss_mib": 277.6, "npu_percent": [35, 26]},
+    "positive": {"messages": 500, "contract_pass": 500, "visible_person_pose17_messages": 289, "temporal_track_messages": 410, "fall_events": 4, "states": ["normal", "suspected", "fallen", "recovering"], "raw_sha256": "7de49f49fb18ecaa35103714def356af526f62351d95e6fa892e0201d1c9c962"}
+  },
+  "rk3588": {
+    "single": {"mqtt_observed_fps": 8.5647, "source_frame_id_rate": 14.8053, "inference_p95_ms": 76.0, "pipeline_p95_ms": 76.4526, "mqtt_p95_ms": 232.2, "cpu_percent": 34.73, "rss_mib": 169.8, "npu_percent": [47, 0, 0]},
+    "multi": {"streams": 3, "mqtt_observed_fps": [5.1861, 5.4098, 5.6503], "source_frame_id_rate": [10.6438, 10.6011, 11.0018], "inference_p95_ms": [136.9, 134.1, 137.6], "pipeline_p95_ms": [137.855, 135.1065, 138.5024], "cpu_percent": 101.89, "rss_mib": 366.4, "npu_percent": [64, 48, 29]},
+    "positive": {"messages": 500, "contract_pass": 500, "visible_person_pose17_messages": 302, "temporal_track_messages": 398, "fall_events": 5, "states": ["normal", "suspected", "fallen"], "raw_sha256": "f9c52480e8e7a35c11f69ce591f2b7046bb3e276338a10bb280981b9d3239975"}
+  },
+  "raw_backup": "spark:/home/harvest/datasets/fall-detection/evaluation/rk-e2e/20260813/",
+  "accuracy_claim": false
+}

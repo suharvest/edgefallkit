@@ -1,0 +1,47 @@
+services:
+  fall-detection:
+    image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1}
+    build:
+      context: ../rknn
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+      network: host
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    devices:
+      - "/dev/dri:/dev/dri"
+    volumes:
+      - /lib/aarch64-linux-gnu/gstreamer-1.0/libgstrockchipmpp.so:/lib/aarch64-linux-gnu/gstreamer-1.0/libgstrockchipmpp.so:ro
+      - /lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so:/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so:ro
+      - /lib/aarch64-linux-gnu/libgstcodecparsers-1.0.so.0:/lib/aarch64-linux-gnu/libgstcodecparsers-1.0.so.0:ro
+      - /lib/aarch64-linux-gnu/librockchip_mpp.so.1:/lib/aarch64-linux-gnu/librockchip_mpp.so.1:ro
+      - /lib/aarch64-linux-gnu/librga.so.2:/lib/aarch64-linux-gnu/librga.so.2:ro
+      - /usr/lib/librknnrt.so:/usr/lib/librknnrt.so:ro
+      - /usr/lib/python3/dist-packages/rknnlite:/usr/local/lib/python3.11/site-packages/rknnlite:ro
+      - /usr/lib/python3/dist-packages/ruamel:/usr/local/lib/python3.11/site-packages/ruamel:ro
+      - /usr/lib/python3/dist-packages/psutil:/usr/local/lib/python3.11/site-packages/psutil:ro
+      - ./config:/config:ro
+      - ./models:/models:ro
+    command: ["app.py", "--config", "/config/config.json"]
+  benchmark:
+    profiles: ["benchmark"]
+    image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1}
+    network_mode: host
+    privileged: true
+    devices:
+      - "/dev/dri:/dev/dri"
+    volumes:
+      - /lib/aarch64-linux-gnu/gstreamer-1.0/libgstrockchipmpp.so:/lib/aarch64-linux-gnu/gstreamer-1.0/libgstrockchipmpp.so:ro
+      - /lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so:/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so:ro
+      - /lib/aarch64-linux-gnu/libgstcodecparsers-1.0.so.0:/lib/aarch64-linux-gnu/libgstcodecparsers-1.0.so.0:ro
+      - /lib/aarch64-linux-gnu/librockchip_mpp.so.1:/lib/aarch64-linux-gnu/librockchip_mpp.so.1:ro
+      - /lib/aarch64-linux-gnu/librga.so.2:/lib/aarch64-linux-gnu/librga.so.2:ro
+      - /usr/lib/librknnrt.so:/usr/lib/librknnrt.so:ro
+      - /usr/lib/python3/dist-packages/rknnlite:/usr/local/lib/python3.11/site-packages/rknnlite:ro
+      - /usr/lib/python3/dist-packages/ruamel:/usr/local/lib/python3.11/site-packages/ruamel:ro
+      - /usr/lib/python3/dist-packages/psutil:/usr/local/lib/python3.11/site-packages/psutil:ro
+      - ./models:/models:ro
+      - ./results:/results
+    command: ["benchmark.py", "--model", "/models/yolo11n_pose_rawhead_fp16.rk3588.rknn", "--contexts", "1", "--iterations", "200", "--json-out", "/results/rk3588.json"]

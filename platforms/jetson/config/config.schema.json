@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["engine_path", "streams"],
+  "properties": {
+    "engine_path": {"type": "string", "minLength": 1},
+    "trt_library": {"type": "string", "minLength": 1},
+    "temporal_profile": {
+      "type": "string",
+      "enum": ["auto", "yolo11s-pose", "yolo11m-pose"],
+      "default": "auto",
+      "description": "Temporal weights; auto infers yolo11m from the engine filename and otherwise uses yolo11s."
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "width": {"type": "integer", "minimum": 1, "maximum": 8192},
+        "height": {"type": "integer", "minimum": 1, "maximum": 8192}
+      },
+      "additionalProperties": false
+    },
+    "score_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "keypoint_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "nms_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "max_fps": {"type": "integer", "minimum": 0},
+    "max_detections": {"type": "integer", "minimum": 1, "maximum": 4096},
+    "rtsp_latency_ms": {"type": "integer", "minimum": 0},
+    "publish_empty_frames": {"type": "boolean"},
+    "tracker": {"type": "object"},
+    "fall": {
+      "type": "object",
+      "description": "Fall state-machine thresholds. Geometry may arm suspected; with the production default below only the learned temporal gate can confirm fallen.",
+      "properties": {
+        "temporal_confirmation_required": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require temporal-positive confirmation before entering fallen. Set false only for explicit legacy geometry-only bring-up."
+        },
+        "hip_drop_speed_threshold": {"type": "number", "minimum": 0},
+        "hip_drop_distance_threshold": {"type": "number", "minimum": 0},
+        "motion_window_sec": {"type": "number", "minimum": 0},
+        "torso_angle_threshold_deg": {"type": "number", "minimum": 0, "maximum": 180},
+        "bbox_aspect_ratio_threshold": {"type": "number", "minimum": 0},
+        "min_suspected_features": {"type": "integer", "minimum": 0, "maximum": 3},
+        "confirmation_sec": {"type": "number", "minimum": 0},
+        "suspected_timeout_sec": {"type": "number", "minimum": 0},
+        "occlusion_grace_sec": {"type": "number", "minimum": 0},
+        "recovery_torso_angle_deg": {"type": "number", "minimum": 0, "maximum": 180},
+        "recovery_aspect_ratio": {"type": "number", "minimum": 0},
+        "recovery_window_sec": {"type": "number", "minimum": 0},
+        "cooldown_sec": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "mqtt": {"type": "object"},
+    "streams": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": ["id", "rtsp_url"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "rtsp_url": {"type": "string", "minLength": 1},
+          "codec": {"type": "string", "enum": ["h264", "h265", "hevc"]},
+          "latency_ms": {"type": "integer", "minimum": 0},
+          "enabled": {"type": "boolean"},
+          "reconnect_delay_ms": {"type": "integer", "minimum": 100}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

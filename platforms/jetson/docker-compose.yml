@@ -1,0 +1,36 @@
+services:
+  fall-detection:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jetson-fall-detection:trt10.3
+    command: ["--config", "/app/config/config.json"]
+    restart: unless-stopped
+    runtime: nvidia
+    network_mode: host
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+      PYTHONUNBUFFERED: "1"
+      LD_LIBRARY_PATH: /usr/local/cuda/lib64:/host-nvidia:/host-trt:/usr/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu/nvidia
+    devices:
+      - /dev:/dev
+    volumes:
+      # Keep engine/config outside the image so it can be rebuilt for the
+      # exact Orin SM87 + host TensorRT 10.3 signature.
+      - ./config/config.json:/app/config/config.json:ro
+      - ./models:/models:ro
+      # Host TensorRT/CUDA are authoritative.  This avoids silently loading a
+      # different TRT ABI from a base image (especially r36.4 images).
+      - /usr/lib/aarch64-linux-gnu/libnvinfer.so.10:/host-trt/libnvinfer.so.10:ro
+      - /usr/lib/aarch64-linux-gnu/libnvinfer_plugin.so.10:/host-trt/libnvinfer_plugin.so.10:ro
+      - /usr/lib/aarch64-linux-gnu/libnvonnxparser.so.10:/host-trt/libnvonnxparser.so.10:ro
+      - /usr/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu:ro
+      - /usr/local/cuda:/usr/local/cuda:ro
+      - /usr/src/tensorrt:/usr/src/tensorrt:ro
+      - /usr/lib/aarch64-linux-gnu/nvidia:/host-nvidia:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /app/app.py && test -s /app/libjetson_fall_trt.so"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

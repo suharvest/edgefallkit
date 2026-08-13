@@ -1,0 +1,1 @@
+BENCHMARK stream=spark-fall-person frames=884 seconds=60.0511 fps=14.7208 mean_pipeline_ms=7.47584

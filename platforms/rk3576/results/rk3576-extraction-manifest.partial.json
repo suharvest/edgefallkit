@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "platform": "rk3576",
+  "model": "/models/yolo11n_pose_rawhead_fp16.rk3576.rknn",
+  "model_sha256": "659519ae8179749925c3f15d978b760f6040a00ae01666c9050036077bac8bbd",
+  "dataset": "/data/gmdcsa24",
+  "subjects": [
+    1,
+    2,
+    3
+  ],
+  "holdout_authorized": false,
+  "target_fps": 15.0,
+  "input_size": 640,
+  "expected_clips": 123,
+  "completed": {
+    "subject-1/ADL/01.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/01.mp4",
+      "trace": "/traces/subject-1/ADL/01.jsonl",
+      "frames": 124,
+      "tracking_frames": 124,
+      "valid_pose_frames": 124,
+      "coverage": 1.0,
+      "inference_mean_ms": 62.277643227829564,
+      "trace_sha256": "7818780ef673b4ca7ab4947f1430934267f8c4313e43b15805e6628dc434820c"
+    },
+    "subject-1/ADL/02.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/02.mp4",
+      "trace": "/traces/subject-1/ADL/02.jsonl",
+      "frames": 101,
+      "tracking_frames": 101,
+      "valid_pose_frames": 101,
+      "coverage": 1.0,
+      "inference_mean_ms": 60.2650608922733,
+      "trace_sha256": "844c114f1da2cd4cdb63c08fc2ce0238c376222d02ddcee772bea2d979b598d1"
+    },
+    "subject-1/ADL/03.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/03.mp4",
+      "trace": "/traces/subject-1/ADL/03.jsonl",
+      "frames": 101,
+      "tracking_frames": 101,
+      "valid_pose_frames": 101,
+      "coverage": 1.0,
+      "inference_mean_ms": 61.123905878624704,
+      "trace_sha256": "e136f97248d0cad549733c45c3fd2fecf6ddba7dcf357072cc5ea22ac3614522"
+    },
+    "subject-1/ADL/04.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/04.mp4",
+      "trace": "/traces/subject-1/ADL/04.jsonl",
+      "frames": 87,
+      "tracking_frames": 87,
+      "valid_pose_frames": 87,
+      "coverage": 1.0,
+      "inference_mean_ms": 62.49458207909403,
+      "trace_sha256": "fff350fce3e607a60c545e599f4517b2ffa9da3421abcce4b40f3ced6c3aa7b4"
+    },
+    "subject-1/ADL/05.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/05.mp4",
+      "trace": "/traces/subject-1/ADL/05.jsonl",
+      "frames": 158,
+      "tracking_frames": 142,
+      "valid_pose_frames": 129,
+      "coverage": 0.8987341772151899,
+      "inference_mean_ms": 61.788111312102664,
+      "trace_sha256": "7e3aae97f3dd3d5931c1b05e5eda0e20cc5c68cc61c08ceeb5a40407d3a913bc"
+    },
+    "subject-1/ADL/06.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/06.mp4",
+      "trace": "/traces/subject-1/ADL/06.jsonl",
+      "frames": 184,
+      "tracking_frames": 184,
+      "valid_pose_frames": 184,
+      "coverage": 1.0,
+      "inference_mean_ms": 61.27034615138141,
+      "trace_sha256": "9df7b0ddc82e1d66e099835356b28698f60046fe7917cd8c3c46673e64947355"
+    },
+    "subject-1/ADL/07.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/07.mp4",
+      "trace": "/traces/subject-1/ADL/07.jsonl",
+      "frames": 113,
+      "tracking_frames": 113,
+      "valid_pose_frames": 113,
+      "coverage": 1.0,
+      "inference_mean_ms": 60.45797353495011,
+      "trace_sha256": "df23a166e351c5ce515ecd54d000f0df30ef0cd108306ec6bdfe4b8d20ff6538"
+    },
+    "subject-1/ADL/08.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/08.mp4",
+      "trace": "/traces/subject-1/ADL/08.jsonl",
+      "frames": 95,
+      "tracking_frames": 95,
+      "valid_pose_frames": 95,
+      "coverage": 1.0,
+      "inference_mean_ms": 60.73673260643294,
+      "trace_sha256": "cae6a9881ad031aab0ccc616382ef68e7f89009b2cc3aab50f5c4411fec6882f"
+    },
+    "subject-1/ADL/09.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/09.mp4",
+      "trace": "/traces/subject-1/ADL/09.jsonl",
+      "frames": 75,
+      "tracking_frames": 75,
+      "valid_pose_frames": 75,
+      "coverage": 1.0,
+      "inference_mean_ms": 62.212504421671234,
+      "trace_sha256": "d47093c10d00a2c7a3c3b02bfe0549c508df4c8308c0e89dc5f4104f2cf173af"
+    },
+    "subject-1/ADL/10.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/10.mp4",
+      "trace": "/traces/subject-1/ADL/10.jsonl",
+      "frames": 59,
+      "tracking_frames": 59,
+      "valid_pose_frames": 59,
+      "coverage": 1.0,
+      "inference_mean_ms": 60.401739789394,
+      "trace_sha256": "296e33cdb0d3e389a2364e9dd2f8f9e144c4d9a8041c6ec8583c464a89230bae"
+    },
+    "subject-1/ADL/11.mp4": {
+      "source": "/data/gmdcsa24/subject-1/ADL/11.mp4",
+      "trace": "/traces/subject-1/ADL/11.jsonl",
+      "frames": 140,
+      "tracking_frames": 140,
+      "valid_pose_frames": 140,
+      "coverage": 1.0,
+      "inference_mean_ms": 59.13270157096641,
+      "trace_sha256": "0e489d2953dfddeba63744470ca761746615af2b22e049c2a245d1b96df0b097"
+    }
+  },
+  "failed": {},
+  "started_unix_ms": 1786598354300,
+  "updated_unix_ms": 1786598447525
+}

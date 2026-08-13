@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seeed.studio/schemas/fall-detection/mqtt-result-v1.json",
+  "title": "Cross-platform fall-detection MQTT result v1",
+  "type": "object",
+  "required": [
+    "timestamp", "frame_id", "inference_time_ms", "stream_id",
+    "fall_detected", "fall_event", "event_id", "global_event_id",
+    "event_id_scope", "state", "person_detected", "person_count",
+    "fallen_count", "tracking", "features", "keypoints", "pose17",
+    "persons"
+  ],
+  "properties": {
+    "timestamp": {"type": "integer", "minimum": 0, "description": "Unix epoch milliseconds"},
+    "frame_id": {"type": "integer", "minimum": 0},
+    "inference_time_ms": {"type": "number", "minimum": 0},
+    "stream_id": {"type": "string", "minLength": 1},
+    "fall_detected": {"type": "boolean"},
+    "fall_event": {"type": "boolean"},
+    "event_id": {"type": "integer", "minimum": 0},
+    "global_event_id": {"type": "integer", "minimum": 0},
+    "event_id_scope": {"const": "stream_global_event_id"},
+    "state": {"$ref": "#/$defs/state"},
+    "person_detected": {"type": "boolean"},
+    "person_count": {"type": "integer", "minimum": 0},
+    "fallen_count": {"type": "integer", "minimum": 0},
+    "tracking": {"type": "boolean"},
+    "features": {"$ref": "#/$defs/features"},
+    "keypoints": {"type": "array"},
+    "pose17": {"$ref": "#/$defs/pose17"},
+    "persons": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/person"}
+    },
+    "pipeline_ms": {"type": "number", "minimum": 0},
+    "coordinate_space": {"type": "string"},
+    "device": {"type": "string"},
+    "type": {"type": "string"},
+    "version": {"type": "string"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "state": {"enum": ["normal", "suspected", "fallen", "recovering"]},
+    "point3": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number"}, {"type": "number"}, {"type": "number"}
+      ],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "pose17": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/point3"},
+      "oneOf": [
+        {"maxItems": 0},
+        {"minItems": 17, "maxItems": 17}
+      ],
+      "description": "Empty when unavailable, otherwise exactly 17 normalized COCO points [x,y,confidence]"
+    },
+    "features": {
+      "type": "object",
+      "required": ["valid", "hip_drop_speed", "hip_drop_distance", "torso_angle_deg", "bbox_aspect_ratio"],
+      "properties": {
+        "valid": {"type": "boolean"},
+        "hip_drop_speed": {"type": "number"},
+        "hip_drop_distance": {"type": "number"},
+        "torso_angle_deg": {"type": "number"},
+        "bbox_aspect_ratio": {"type": "number"},
+        "person_score": {"type": "number"},
+        "temporal_probability": {"type": "number"},
+        "temporal_positive": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "person": {
+      "type": "object",
+      "required": [
+        "track_id", "state", "fall_detected", "fall_event", "event_id",
+        "person_detected", "person_score", "tracking", "missed_frames",
+        "bbox", "features", "keypoints", "pose17"
+      ],
+      "properties": {
+        "track_id": {"type": "integer", "minimum": 1},
+        "state": {"$ref": "#/$defs/state"},
+        "fall_detected": {"type": "boolean"},
+        "fall_event": {"type": "boolean"},
+        "event_id": {"type": "integer", "minimum": 0, "description": "Per-track event counter"},
+        "person_detected": {"type": "boolean"},
+        "person_score": {"type": "number"},
+        "tracking": {"type": "boolean"},
+        "missed_frames": {"type": "integer", "minimum": 0},
+        "bbox": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "Normalized [center_x,center_y,width,height]"
+        },
+        "features": {"$ref": "#/$defs/features"},
+        "keypoints": {"type": "array"},
+        "pose17": {"$ref": "#/$defs/pose17"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

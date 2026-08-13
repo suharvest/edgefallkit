@@ -1,0 +1,25 @@
+{
+  "date": "2026-08-13",
+  "device": "orin-nx",
+  "power_mode": "MAXN_SUPER",
+  "engine": "yolo11m-pose.fp16.engine",
+  "engine_bytes": 51571548,
+  "precision": "FP16",
+  "input": "1x3x640x640",
+  "tensorrt": "10.3.0.30",
+  "method": "trtexec --useCudaGraph --noDataTransfers --infStreams=N, 10s measured after 2s warmup",
+  "background_load": "edge-llm-chat and voice services kept running; about 13.3 GiB system RAM in use during benchmark",
+  "raw_logs": "/private/tmp/jetson-nx-multicontext-yolo11m-20260813-v2",
+  "runs": [
+    {"contexts": 1, "aggregate_fps": 53.8313, "per_context_fps": 53.831, "latency_mean_ms": 18.5740, "latency_p95_ms": 18.5957, "process_cpu_percent_mean": 6.877, "process_rss_mib_mean": 203.334, "process_rss_mib_max": 219.660, "gpu_util_percent_mean": 91.385, "board_power_w_mean": 23.873, "board_power_w_max": 25.161},
+    {"contexts": 2, "aggregate_fps": 54.2732, "per_context_fps": 27.137, "latency_mean_ms": 36.8255, "latency_p95_ms": 37.0408, "process_cpu_percent_mean": 8.177, "process_rss_mib_mean": 214.638, "process_rss_mib_max": 231.906, "gpu_util_percent_mean": 91.385, "board_power_w_mean": 24.966, "board_power_w_max": 26.385},
+    {"contexts": 3, "aggregate_fps": 53.6016, "per_context_fps": 17.867, "latency_mean_ms": 55.8013, "latency_p95_ms": 60.3411, "process_cpu_percent_mean": 9.623, "process_rss_mib_mean": 226.353, "process_rss_mib_max": 244.598, "gpu_util_percent_mean": 91.385, "board_power_w_mean": 24.849, "board_power_w_max": 26.231},
+    {"contexts": 4, "aggregate_fps": 53.5981, "per_context_fps": 13.400, "latency_mean_ms": 74.3057, "latency_p95_ms": 89.4009, "process_cpu_percent_mean": 10.723, "process_rss_mib_mean": 237.430, "process_rss_mib_max": 256.598, "gpu_util_percent_mean": 91.385, "board_power_w_mean": 25.037, "board_power_w_max": 26.375},
+    {"contexts": 6, "aggregate_fps": 53.5433, "per_context_fps": 8.924, "latency_mean_ms": 110.8520, "latency_p95_ms": 127.9120, "process_cpu_percent_mean": 13.662, "process_rss_mib_mean": 260.330, "process_rss_mib_max": 281.406, "gpu_util_percent_mean": 91.385, "board_power_w_mean": 25.332, "board_power_w_max": 26.683}
+  ],
+  "static_batch": {
+    "build_command_template": "tools/build_engine.sh MODEL.onnx OUTPUT.engine --minShapes=images:Bx3x640x640 --optShapes=images:Bx3x640x640 --maxShapes=images:Bx3x640x640 --memPoolSize=workspace:1024",
+    "onnx_sha256": "7fe8762007efd17976bdf140b99eac9a8069accd7020a5873ad20dd4caaf633c",
+    "batch4": {"status": "complete", "engine_bytes": 44795132, "engine_sha256": "9bb2720c29396f53030ffccb438c1b85365b06991b99ae666246086704b70bfe", "batches_per_second": 26.4889, "images_per_second": 105.9556, "batch_latency_mean_ms": 37.7494, "batch_latency_p95_ms": 38.0171, "process_cpu_percent_mean": 8.338, "process_rss_mib_mean": 309.812, "gpu_util_percent_mean": 91.385, "board_power_w_mean": 30.381}
+  }
+}

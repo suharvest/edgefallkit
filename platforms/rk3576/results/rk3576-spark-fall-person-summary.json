@@ -1,0 +1,52 @@
+{
+  "collector_command": [
+    "/opt/homebrew/bin/mosquitto_sub",
+    "-h",
+    "127.0.0.1",
+    "-t",
+    "fall-person/rk3576/+",
+    "-C",
+    "500",
+    "-W",
+    "180"
+  ],
+  "return_code": 0,
+  "captured_messages": 500,
+  "aggregate_mqtt_observed_fps": 4.391948388005316,
+  "streams": {
+    "fall-01": {
+      "messages": 500,
+      "first_frame_id": 132,
+      "last_frame_id": 1234,
+      "frame_id_span": 1102,
+      "timestamp_span_ms": 113617,
+      "mqtt_observed_fps": 4.391948388005316,
+      "source_frame_id_rate": 9.699252752669056,
+      "missing_frame_ids": 603,
+      "inference_time_ms": {
+        "mean": 71.6,
+        "p50": 63.5,
+        "p95": 100.0,
+        "p99": 121.00999999999999,
+        "max": 130.0
+      },
+      "pipeline_ms": {
+        "mean": 74.576972,
+        "p50": 66.956,
+        "p95": 103.6435,
+        "p99": 125.42966,
+        "max": 135.904
+      },
+      "decoded_frame_to_mqtt_receive_ms": {
+        "mean": 181.474,
+        "p50": 140.5,
+        "p95": 285.1,
+        "p99": 437.1199999999999,
+        "max": 506.0
+      },
+      "missing_contract_fields": [],
+      "fall_events": 4
+    }
+  },
+  "latency_scope": "pipeline_ms starts after cv2 returns a decoded frame; decoded_frame_to_mqtt_receive_ms adds MQTT delivery and assumes synchronized device/Mac clocks; source encode/network latency is not represented by the payload timestamp"
+}

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Verify release baseline
+        run: ./tools/verify_baseline.sh
+
+      - name: Test deployment helpers
+        run: |
+          bash platforms/jetson/tools/test_prepare_model.sh
+          python3 platforms/rpi-hailo/tests/deploy_test.py
+
+      - name: Test RK Python control plane
+        run: >-
+          uv run --with 'numpy<2' --with opencv-python-headless
+          python -m unittest discover -s platforms/rknn/tests -p 'test_*.py'
+
+      - name: Test Jetson host core
+        run: |
+          cmake -S platforms/jetson -B /tmp/edgefallkit-jetson-host \
+            -DBUILD_APP=OFF -DBUILD_TESTING=ON
+          cmake --build /tmp/edgefallkit-jetson-host -j2
+          ctest --test-dir /tmp/edgefallkit-jetson-host --output-on-failure

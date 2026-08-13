@@ -1,0 +1,149 @@
+{
+  "protocol": "train subjects 1-2; validate subject 3; refit subjects 1-3 after configuration freeze; test on 27 untouched subject-4 clips (10 prior smoke clips excluded)",
+  "clips_by_subject": {
+    "1": 32,
+    "2": 48,
+    "3": 43,
+    "4": 37
+  },
+  "phase": "frozen_test",
+  "split_sizes": {
+    "training": 80,
+    "validation": 43,
+    "test": 27,
+    "discarded_subject4_smoke": 10
+  },
+  "feature_dim": 504,
+  "window_frames": 48,
+  "stride_frames": 3,
+  "best": {
+    "variant": "all",
+    "hidden": 16,
+    "alpha": 0.01,
+    "threshold": 0.7499999999999999,
+    "consecutive": 3,
+    "validation_f1": 0.975609756097561,
+    "validation_balanced_accuracy": 0.9761904761904762,
+    "validation": {
+      "n": 43,
+      "tp": 20,
+      "fn": 1,
+      "tn": 22,
+      "fp": 0,
+      "accuracy": 0.9767441860465116,
+      "recall": 0.9523809523809523,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "f1": 0.975609756097561,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 1.1050000000000002,
+      "median_detection_latency_sec": 1.15,
+      "misclassified": [
+        "subject-3/Fall/04.jsonl"
+      ]
+    }
+  },
+  "validation": {
+    "n": 43,
+    "tp": 20,
+    "fn": 1,
+    "tn": 22,
+    "fp": 0,
+    "accuracy": 0.9767441860465116,
+    "recall": 0.9523809523809523,
+    "specificity": 1.0,
+    "precision": 1.0,
+    "f1": 0.975609756097561,
+    "early_fall_alerts": 0,
+    "mean_detection_latency_sec": 1.1050000000000002,
+    "median_detection_latency_sec": 1.15,
+    "misclassified": [
+      "subject-3/Fall/04.jsonl"
+    ]
+  },
+  "subject4_clean_test": {
+    "n": 27,
+    "tp": 12,
+    "fn": 0,
+    "tn": 12,
+    "fp": 3,
+    "accuracy": 0.8888888888888888,
+    "recall": 1.0,
+    "specificity": 0.8,
+    "precision": 0.8,
+    "f1": 0.888888888888889,
+    "early_fall_alerts": 0,
+    "mean_detection_latency_sec": 1.6083333333333334,
+    "median_detection_latency_sec": 1.25,
+    "misclassified": [
+      "subject-4/ADL/06.jsonl",
+      "subject-4/ADL/07.jsonl",
+      "subject-4/ADL/08.jsonl"
+    ]
+  },
+  "heuristic_validation": {
+    "n": 43,
+    "tp": 2,
+    "fn": 19,
+    "tn": 22,
+    "fp": 0,
+    "accuracy": 0.5581395348837209,
+    "recall": 0.09523809523809523,
+    "specificity": 1.0,
+    "precision": 1.0,
+    "f1": 0.17391304347826084,
+    "early_fall_alerts": 4,
+    "mean_detection_latency_sec": 0.14300000000000002,
+    "median_detection_latency_sec": 0.14300000000000002,
+    "misclassified": [
+      "subject-3/Fall/01.jsonl",
+      "subject-3/Fall/02.jsonl",
+      "subject-3/Fall/03.jsonl",
+      "subject-3/Fall/04.jsonl",
+      "subject-3/Fall/05.jsonl",
+      "subject-3/Fall/08.jsonl",
+      "subject-3/Fall/09.jsonl",
+      "subject-3/Fall/10.jsonl",
+      "subject-3/Fall/11.jsonl",
+      "subject-3/Fall/12.jsonl",
+      "subject-3/Fall/13.jsonl",
+      "subject-3/Fall/14.jsonl",
+      "subject-3/Fall/15.jsonl",
+      "subject-3/Fall/16.jsonl",
+      "subject-3/Fall/17.jsonl",
+      "subject-3/Fall/18.jsonl",
+      "subject-3/Fall/19.jsonl",
+      "subject-3/Fall/20.jsonl",
+      "subject-3/Fall/21.jsonl"
+    ]
+  },
+  "heuristic_subject4_clean_test": {
+    "n": 27,
+    "tp": 4,
+    "fn": 8,
+    "tn": 13,
+    "fp": 2,
+    "accuracy": 0.6296296296296297,
+    "recall": 0.3333333333333333,
+    "specificity": 0.8666666666666667,
+    "precision": 0.6666666666666666,
+    "f1": 0.4444444444444444,
+    "early_fall_alerts": 3,
+    "mean_detection_latency_sec": 0.005249999999999977,
+    "median_detection_latency_sec": -0.21200000000000008,
+    "misclassified": [
+      "subject-4/ADL/06.jsonl",
+      "subject-4/ADL/16.jsonl",
+      "subject-4/Fall/02.jsonl",
+      "subject-4/Fall/03.jsonl",
+      "subject-4/Fall/07.jsonl",
+      "subject-4/Fall/08.jsonl",
+      "subject-4/Fall/10.jsonl",
+      "subject-4/Fall/11.jsonl",
+      "subject-4/Fall/12.jsonl",
+      "subject-4/Fall/16.jsonl"
+    ]
+  },
+  "realbiomfall_external_test": null,
+  "heuristic_realbiomfall_external_test": null
+}

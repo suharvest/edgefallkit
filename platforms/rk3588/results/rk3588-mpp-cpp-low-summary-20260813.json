@@ -1,0 +1,64 @@
+{
+  "collector_command": [
+    "mosquitto_sub",
+    "-h",
+    "127.0.0.1",
+    "-t",
+    "fall-e2e/rk3588/+",
+    "-C",
+    "200",
+    "-W",
+    "120"
+  ],
+  "return_code": 0,
+  "elapsed_sec": 39.44660875003319,
+  "captured_messages": 200,
+  "schema_pass": 200,
+  "schema_fail": 0,
+  "schema_errors": [],
+  "streams": {
+    "cam-01": {
+      "messages": 200,
+      "schema_pass": 200,
+      "schema_fail": 0,
+      "first_frame_id": 1,
+      "last_frame_id": 200,
+      "mqtt_observed_fps": 14.6744340387877,
+      "source_frame_id_rate": 14.236657604807554,
+      "inference_ms": {
+        "mean": 53.651365,
+        "p50": 48.745,
+        "p95": 82.995,
+        "p99": 141.361,
+        "max": 183.098
+      },
+      "pipeline_ms": {
+        "mean": 54.11599,
+        "p50": 48.922,
+        "p95": 83.202,
+        "p99": 158.803,
+        "max": 183.977
+      },
+      "receive_minus_frame_timestamp_ms": {
+        "mean": 54.035,
+        "p50": 44,
+        "p95": 140,
+        "p99": 304,
+        "max": 439
+      },
+      "source_backends": [
+        "gstreamer_mpp"
+      ],
+      "postprocess_backends": [
+        "cpp"
+      ],
+      "fall_events": 0,
+      "visible_person_messages": 0,
+      "tracked_messages": 0,
+      "states": [
+        "normal"
+      ]
+    }
+  },
+  "latency_scope": "pipeline_ms starts after appsink/cv2 returns a model-input frame; receive-minus-frame timestamp also includes MQTT and clock offset, not source encode time"
+}

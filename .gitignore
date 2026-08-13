@@ -1,0 +1,19 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+build/
+build-*/
+*.deb
+*.rknn
+
+# Large reproducibility material is retained locally but not committed by
+# default. Keep manifests and README files trackable.
+assets/datasets/**
+assets/models/**
+assets/traces/**
+!assets/datasets/README.md
+!assets/models/README.md
+!assets/traces/README.md
+!assets/SHA256SUMS

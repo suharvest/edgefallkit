@@ -1,0 +1,7 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.13.0
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro

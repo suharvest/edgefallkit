@@ -1,0 +1,55 @@
+services:
+  builder:
+    build:
+      context: ../..
+      dockerfile: platforms/rpi-hailo/Dockerfile.build
+    profiles: ["build"]
+    volumes:
+      - ../..:/src
+      - /usr/include/hailo:/usr/include/hailo:ro
+      - /usr/include/gstreamer-1.0/gst/hailo:/usr/include/gstreamer-1.0/gst/hailo:ro
+      - /usr/lib/cmake/HailoRT:/usr/lib/cmake/HailoRT:ro
+      - /usr/lib/libhailort.so.4.21.0:/usr/lib/libhailort.so.4.21.0:ro
+      - /usr/lib/libhailort.so:/usr/lib/libhailort.so:ro
+      - /usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgsthailo.so:/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgsthailo.so:ro
+
+  fall-detection:
+    build:
+      context: ../..
+      dockerfile: platforms/rpi-hailo/Dockerfile
+    image: ${FALL_HAILO_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1}
+    network_mode: host
+    restart: unless-stopped
+    devices:
+      - /dev/hailo0:/dev/hailo0
+    environment:
+      HEF_PATH: /models/yolov8s_pose.hef
+      # Semicolon-separated id|URL entries; add entries for multi-stream use.
+      STREAMS: "${STREAMS:-cam-01|rtsp://192.168.1.10:554/stream1}"
+      RTSP_LATENCY_MS: ${RTSP_LATENCY_MS:-100}
+      MQTT_HOST: ${MQTT_HOST:-127.0.0.1}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TOPIC: ${MQTT_TOPIC:-recamera/fall-detection/results/{stream_id}}
+      SCORE_THRESHOLD: ${SCORE_THRESHOLD:-0.35}
+      KEYPOINT_THRESHOLD: ${KEYPOINT_THRESHOLD:-0.25}
+      BENCHMARK_SECONDS: ${BENCHMARK_SECONDS:-0}
+    volumes:
+      - ./models:/models:ro
+      # ABI lock: plugin, user library and driver must all match host HailoRT 4.21.
+      - /usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgsthailo.so:/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgsthailo.so:ro
+      - /usr/lib/libhailort.so.4.21.0:/usr/lib/libhailort.so.4.21.0:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -c /dev/hailo0 && test -r /models/yolov8s_pose.hef"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    profiles: ["local-broker"]
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro

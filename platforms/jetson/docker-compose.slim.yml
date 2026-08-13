@@ -1,0 +1,63 @@
+services:
+  fall-detection:
+    image: ${FALL_DETECTION_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1}
+    command: ["--config", "/app/config/config.json"]
+    restart: unless-stopped
+    runtime: nvidia
+    network_mode: host
+    depends_on:
+      - mosquitto
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+      PYTHONUNBUFFERED: "1"
+      # Host python3.10 dist-packages supplies cv2 (OpenCV 4.8.0 with
+      # GStreamer/RTSP support). The image itself has no opencv.
+      PYTHONPATH: /host-python
+      # GStreamer elements (rtspsrc/appsink/nvv4l2decoder) come from the
+      # host too; they sit under /host-lib, not the default plugin dir.
+      GST_PLUGIN_PATH: /host-lib/gstreamer-1.0
+      GST_PLUGIN_SYSTEM_PATH: /host-lib/gstreamer-1.0
+      GST_PLUGIN_SCANNER: /host-lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner
+      GST_REGISTRY: /tmp/gstreamer-1.0-registry.bin
+      LD_LIBRARY_PATH: /usr/local/cuda/lib64:/host-nvidia:/host-trt:/host-opencv:/host-lib:/host-lib/nvidia
+    # No blanket `devices: - /dev:/dev`: runc refuses to recreate /dev/pts
+    # inodes and the nvidia runtime already injects the GPU device nodes.
+    # Add individual `/dev/video*` entries here only for USB/CSI camera input.
+    volumes:
+      # Engine/config live outside the image so they can be rebuilt for the
+      # exact Orin SM87 + host TensorRT 10.3 signature.
+      - ./config/config.json:/app/config/config.json:ro
+      - ./models:/models:ro
+      # Host TensorRT/CUDA are authoritative. This avoids silently loading a
+      # different TRT ABI from a base image.
+      - /usr/lib/aarch64-linux-gnu/libnvinfer.so.10:/host-trt/libnvinfer.so.10:ro
+      - /usr/lib/aarch64-linux-gnu/libnvinfer_plugin.so.10:/host-trt/libnvinfer_plugin.so.10:ro
+      - /usr/lib/aarch64-linux-gnu/libnvonnxparser.so.10:/host-trt/libnvonnxparser.so.10:ro
+      # Exposed under /host-lib rather than over the container's own
+      # multiarch dir: overmounting it hides the image's own libraries
+      # (python3-numpy's libblas.so.3 in particular) and numpy fails to
+      # import.
+      - /usr/lib/aarch64-linux-gnu:/host-lib:ro
+      - /usr/local/cuda:/usr/local/cuda:ro
+      - /usr/src/tensorrt:/usr/src/tensorrt:ro
+      - /usr/lib/aarch64-linux-gnu/nvidia:/host-nvidia:ro
+      # JetPack installs OpenCV 4.8.0 into /usr/lib (top level), not into the
+      # multiarch dir; exposed under a private path so it cannot shadow the
+      # container's own /usr/lib.
+      - /usr/lib:/host-opencv:ro
+      # cv2 python bindings from the host (matching python3.10).
+      - /usr/lib/python3.10/dist-packages:/host-python:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /app/app.py && test -s /app/libjetson_fall_trt.so"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mosquitto:
+    image: docker.m.daocloud.io/library/eclipse-mosquitto:2
+    restart: unless-stopped
+    network_mode: host
+    command: ["mosquitto", "-c", "/mosquitto/config/mosquitto.conf"]
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro

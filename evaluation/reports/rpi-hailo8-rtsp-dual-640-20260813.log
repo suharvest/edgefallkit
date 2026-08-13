@@ -1,0 +1,2 @@
+BENCHMARK stream=mac-e2e-1 frames=439 seconds=30.6401 fps=14.3276 mean_pipeline_ms=9.91867
+BENCHMARK stream=mac-e2e-2 frames=438 seconds=30.6401 fps=14.295 mean_pipeline_ms=9.7612

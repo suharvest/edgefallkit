@@ -1,0 +1,85 @@
+{
+  "collector_command": [
+    "/opt/homebrew/bin/mosquitto_sub",
+    "-h",
+    "127.0.0.1",
+    "-t",
+    "fall-e2e/rk3576/+",
+    "-C",
+    "400",
+    "-W",
+    "120"
+  ],
+  "return_code": 0,
+  "captured_messages": 400,
+  "aggregate_mqtt_observed_fps": 7.61557444892071,
+  "streams": {
+    "cam-02": {
+      "messages": 201,
+      "first_frame_id": 89,
+      "last_frame_id": 568,
+      "frame_id_span": 479,
+      "timestamp_span_ms": 52374,
+      "mqtt_observed_fps": 3.818688662313362,
+      "source_frame_id_rate": 9.145759346240501,
+      "missing_frame_ids": 279,
+      "inference_time_ms": {
+        "mean": 75.91044776119404,
+        "p50": 68.0,
+        "p95": 111.0,
+        "p99": 127.0,
+        "max": 128.0
+      },
+      "pipeline_ms": {
+        "mean": 77.41299502487563,
+        "p50": 69.891,
+        "p95": 112.493,
+        "p99": 128.801,
+        "max": 130.218
+      },
+      "decoded_frame_to_mqtt_receive_ms": {
+        "mean": 225.52238805970148,
+        "p50": 221.0,
+        "p95": 364.0,
+        "p99": 500.0,
+        "max": 524.0
+      },
+      "missing_contract_fields": [],
+      "fall_events": 0
+    },
+    "cam-01": {
+      "messages": 199,
+      "first_frame_id": 140,
+      "last_frame_id": 618,
+      "frame_id_span": 478,
+      "timestamp_span_ms": 52148,
+      "mqtt_observed_fps": 3.796885786607348,
+      "source_frame_id_rate": 9.1662192222137,
+      "missing_frame_ids": 280,
+      "inference_time_ms": {
+        "mean": 75.11557788944724,
+        "p50": 67.0,
+        "p95": 109.29999999999998,
+        "p99": 131.02,
+        "max": 134.0
+      },
+      "pipeline_ms": {
+        "mean": 76.54395979899498,
+        "p50": 68.559,
+        "p95": 110.97189999999999,
+        "p99": 133.52872000000002,
+        "max": 137.803
+      },
+      "decoded_frame_to_mqtt_receive_ms": {
+        "mean": 234.93467336683418,
+        "p50": 238.0,
+        "p95": 418.69999999999993,
+        "p99": 497.20000000000016,
+        "max": 528.0
+      },
+      "missing_contract_fields": [],
+      "fall_events": 0
+    }
+  },
+  "latency_scope": "pipeline_ms starts after cv2 returns a decoded frame; decoded_frame_to_mqtt_receive_ms adds MQTT delivery and assumes synchronized device/Mac clocks; source encode/network latency is not represented by the payload timestamp"
+}

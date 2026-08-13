@@ -1,0 +1,32 @@
+{
+  "protocol": "frozen S1-3 configuration; clean S4 test excludes 10 prior smoke clips",
+  "phase": "frozen_test",
+  "platform": "rk3576",
+  "model": "/Users/harvest/project/fall-detection/platforms/rk3576/models/temporal-rk3576.npz",
+  "model_sha256": "dadcb916135e7dec284fe51a49432573e5451ba9c921325df119fbd2e33ebd82",
+  "development_report": "/Users/harvest/project/fall-detection/evaluation/reports/temporal-rk3576-development.json",
+  "subject4_total": 37,
+  "subject4_clean_test": 27,
+  "threshold": 0.7999999999999998,
+  "consecutive": 3,
+  "metrics": {
+    "n": 27,
+    "tp": 12,
+    "fn": 0,
+    "tn": 12,
+    "fp": 3,
+    "accuracy": 0.8888888888888888,
+    "recall": 1.0,
+    "specificity": 0.8,
+    "precision": 0.8,
+    "f1": 0.888888888888889,
+    "early_fall_alerts": 0,
+    "mean_detection_latency_sec": 1.4916666666666665,
+    "median_detection_latency_sec": 1.15,
+    "misclassified": [
+      "subject-4/ADL/06.jsonl",
+      "subject-4/ADL/07.jsonl",
+      "subject-4/ADL/16.jsonl"
+    ]
+  }
+}

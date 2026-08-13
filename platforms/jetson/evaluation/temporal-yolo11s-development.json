@@ -1,0 +1,53 @@
+{
+  "protocol": "fit Subjects 1-2; select on Subject 3; refit Subjects 1-3; no Subject 4",
+  "trace_frontends": [
+    "yolo11s"
+  ],
+  "best": {
+    "variant": "pose",
+    "hidden": 32,
+    "alpha": 0.01,
+    "threshold": 0.7999999999999998,
+    "consecutive": 3,
+    "validation": {
+      "n": 43,
+      "tp": 21,
+      "fn": 0,
+      "tn": 22,
+      "fp": 0,
+      "accuracy": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "f1": 1.0,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 0.9380952380952382,
+      "median_detection_latency_sec": 0.8999999999999999,
+      "misclassified": []
+    },
+    "validation_by_frontend": {
+      "yolo11s": {
+        "n": 43,
+        "tp": 21,
+        "fn": 0,
+        "tn": 22,
+        "fp": 0,
+        "accuracy": 1.0,
+        "recall": 1.0,
+        "specificity": 1.0,
+        "precision": 1.0,
+        "f1": 1.0,
+        "early_fall_alerts": 0,
+        "mean_detection_latency_sec": 0.9380952380952382,
+        "median_detection_latency_sec": 0.8999999999999999,
+        "misclassified": []
+      }
+    },
+    "min_frontend_f1": 1.0,
+    "validation_f1": 1.0,
+    "validation_balanced_accuracy": 1.0
+  },
+  "window_frames": 48,
+  "stride_frames": 3,
+  "feature_dim": 504
+}

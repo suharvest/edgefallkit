@@ -1,0 +1,12 @@
+FROM docker.m.daocloud.io/library/python:3.10-slim-bookworm
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN sed -i -e 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+           -e 's|http://deb.debian.org/debian-security|https://mirrors.tuna.tsinghua.edu.cn/debian-security|g' \
+           /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir \
+    rknn-toolkit2==2.3.2 ultralytics==8.3.207 onnx==1.16.1 'numpy<2' 'setuptools<81'
+WORKDIR /work
+COPY tools/convert_pose_rknn.py tools/export_pose_rawhead_onnx.py /tools/
+ENTRYPOINT ["/bin/sh", "-c"]

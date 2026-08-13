@@ -1,0 +1,8 @@
+build/
+.git/
+*.engine
+*.timing.cache
+models/*.onnx
+models/*.engine
+tests/
+__pycache__/

@@ -1,0 +1,29 @@
+{
+  "device": "Orin NX",
+  "power_mode": "MAXN_SUPER",
+  "runtime": "TensorRT 10.3 FP16 SM87",
+  "model": "YOLO11m-Pose",
+  "image": {"id": "06ba3fef1b4c", "disk_usage_bytes_display": "206MB", "content_size_bytes_display": "51.8MB"},
+  "source": {"host": "spark", "url": "rtsp://192.168.3.42:8554/fall-e2e-low", "codec": "H264 Constrained Baseline", "resolution": "640x640", "fps": 15, "bitrate_mbps": 1.2},
+  "low_stream": {
+    "payloads": 932, "duration_s": 61.9826, "effective_output_fps": 15.0203,
+    "output_interval_ms": {"mean": 66.5764, "p95": 69.7352, "max": 73.1357},
+    "inference_time_ms": {"mean": 20.9812, "p95": 21.03, "max": 28.62},
+    "cpu_percent": {"mean": 10.4337, "p95": 11.16, "max": 11.29},
+    "rss_mib": {"mean": 126.67, "p95": 126.9, "max": 126.9},
+    "gpu_percent": {"mean": 28.4833, "p95": 91.0, "max": 99.0},
+    "vdd_in_w": {"mean": 13.8526, "p95": 14.111, "max": 14.725},
+    "mqtt_contract": {"validated_payloads": 932, "result": "pass", "capture": "publisher interception; broker transport not measured"}
+  },
+  "fall_person_stream": {
+    "url": "rtsp://192.168.3.42:8554/fall-person", "clip": "GMDCSA S4 Fall/01 loop",
+    "payloads": 861, "duration_s": 61.5093, "effective_output_fps": 13.9816,
+    "inference_time_ms": {"mean": 21.0336, "p95": 21.11},
+    "person_frames": 819, "tracking_frames": 861, "pose17_frames": 861,
+    "temporal_positive_frames": 788, "fall_event_frames": 1,
+    "global_event_ids": [1], "fallen_frames": 830,
+    "states": ["normal", "suspected", "fallen", "recovering"], "mqtt_contract_validated_payloads": 861
+  },
+  "caveats": ["P95 is output inter-arrival interval, not source capture-to-MQTT latency.", "The fall clip loops during the measurement, so event count is a path validation, not an accuracy metric.", "NX had no running Docker business containers before or after this run; none were stopped by this test."],
+  "raw_capture_locations": ["/private/tmp/jetson-e2e-spark-nx-20260813", "/private/tmp/jetson-person-nx-20260813"]
+}

@@ -361,9 +361,12 @@ TP=12/FN=0/TN=12/FP=3；RK3576/RK3588 mean latency 分别为 1.492/1.525 s。
 - 文件校验和：[`reports/SHA256SUMS`](reports/SHA256SUMS)
 - 素材位置及公开下载源：[`../assets/ASSET_LOCATIONS.md`](../assets/ASSET_LOCATIONS.md)
 - 训练工具：[`../platforms/jetson/tools/train_temporal_for_pose.py`](../platforms/jetson/tools/train_temporal_for_pose.py)
-- Pro 原生 MLP 工具：[`../platforms/recamera-pro/app/tools/train_freeze_temporal_mlp.py`](../platforms/recamera-pro/app/tools/train_freeze_temporal_mlp.py)
-- Pro 原生 trace 工具：[`../platforms/recamera-pro/app/tools/extract_pose_traces.py`](../platforms/recamera-pro/app/tools/extract_pose_traces.py)
-- Pro 阻塞清单：[`../platforms/recamera-pro/app/evaluation/native-profile-status.json`](../platforms/recamera-pro/app/evaluation/native-profile-status.json)
+- Pro 原生 MLP 工具：canonical sibling checkout
+  `recamera/recamera_pro/apps/fall-detection/tools/train_freeze_temporal_mlp.py`
+- Pro 原生 trace 工具：canonical sibling checkout
+  `recamera/recamera_pro/apps/fall-detection/tools/extract_pose_traces.py`
+- Pro 阻塞清单：canonical sibling checkout
+  `recamera/recamera_pro/apps/fall-detection/evaluation/native-profile-status.json`
 - 视频评测工具：[`../platforms/jetson/tools/evaluate_videos.py`](../platforms/jetson/tools/evaluate_videos.py)
 
 新增结果时必须追加协议、平台、engine/profile、混淆矩阵和原始 JSON；不要只

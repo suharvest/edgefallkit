@@ -126,6 +126,18 @@ class ModelPreparationTest(unittest.TestCase):
     def test_offline_no_up_executes_full_flow_with_pinned_digest(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            models = root / "models"
+            models.mkdir()
+            pose_name = "yolo11n_pose_rawhead_fp16.rk3588.rknn"
+            temporal_name = "temporal-rk3588.npz"
+            pose = b"isolated-rknn-cache"
+            temporal = b"isolated-temporal-cache"
+            (models / pose_name).write_bytes(pose)
+            (models / temporal_name).write_bytes(temporal)
+            (models / "SHA256SUMS").write_text(
+                f"{hashlib.sha256(pose).hexdigest()}  {pose_name}\n"
+                f"{hashlib.sha256(temporal).hexdigest()}  {temporal_name}\n"
+            )
             log = root / "fleet.log"
             fake = root / "fleet"
             fake.write_text(
@@ -137,6 +149,7 @@ class ModelPreparationTest(unittest.TestCase):
             fake.chmod(0o755)
             result = run(DEPLOY, "--platform", "rk3588", "--device", "radxa",
                          "--accept-upstream-license", "--offline", "--no-up",
+                         "--models-dir", str(models),
                          env={"FLEET_BIN": str(fake)})
             self.assertEqual(result.returncode, 0, result.stderr)
             calls = log.read_text()

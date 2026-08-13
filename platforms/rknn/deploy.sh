@@ -9,13 +9,14 @@ Usage: deploy.sh --platform rk3576|rk3588 --accept-upstream-license [options]
   --model-file FILE       prebuilt .rknn or raw-head .onnx
   --model-url HTTPS_URL   prebuilt .rknn or raw-head .onnx URL
   --model-sha256 SHA256   verify a caller-supplied model
+  --models-dir DIR        model/profile cache (default: platform models directory)
   --offline               require cached local model and cached remote runtime
   --dry-run               print every action without changing local/remote state
   --no-up                 prepare, push and validate but do not compose up
 EOF
 }
 
-platform='' device='' builder_host='' model_file='' model_url='' model_sha=''
+platform='' device='' builder_host='' model_file='' model_url='' model_sha='' models_dir=''
 accept=no offline=no dry_run=no up=yes
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -23,6 +24,7 @@ while [ "$#" -gt 0 ]; do
     --builder-host) builder_host=$2; shift 2;; --model-file) model_file=$2; shift 2;;
     --model-url) model_url=$2; shift 2;; --accept-upstream-license) accept=yes; shift;;
     --model-sha256) model_sha=$2; shift 2;;
+    --models-dir) models_dir=$2; shift 2;;
     --offline) offline=yes; shift;; --dry-run) dry_run=yes; shift;; --no-up) up=no; shift;;
     -h|--help) usage; exit 0;; *) echo "unknown option: $1" >&2; usage >&2; exit 2;;
   esac
@@ -31,7 +33,7 @@ done
 case "$platform" in rk3576) device=${device:-cat-remote}; home=/home/cat;; rk3588) device=${device:-radxa}; home=/home/radxa;; *) echo "--platform must be rk3576 or rk3588" >&2; exit 2;; esac
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 platform_dir=$(CDPATH='' cd -- "$script_dir/../$platform" && pwd)
-models=$platform_dir/models
+models=${models_dir:-$platform_dir/models}
 pose=yolo11n_pose_rawhead_fp16.$platform.rknn
 temporal=temporal-$platform.npz
 image=sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc1

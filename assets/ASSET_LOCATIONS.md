@@ -21,6 +21,8 @@ the evaluated working/debug machine; Spark is the durable backup.
 | Hailo-8 YOLOv8s-Pose 160 traces | Pi temporary extraction tree `/tmp/hailo-gmdcsa-traces/` | `/home/harvest/datasets/fall-detection/traces/hailo8-yolov8s-pose/` |
 | Hailo-8 frozen temporal profile/reports | local small copies under `evaluation/reports/` | `/home/harvest/datasets/fall-detection/profiles/hailo8-yolov8s-pose-v1/` |
 | Hailo-8 ARM64 runtime image | `fall-detection-rpi-hailo:4.21` build source on Pi | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1` |
+| reCamera Pro RV1126B GMDCSA traces | Mac archive `/tmp/recamera-pro-rv1126b-gmdcsa-traces-20260813.tar.gz` | `/home/harvest/datasets/fall-detection/traces/recamera-pro/20260813/recamera-pro-rv1126b-gmdcsa-traces-20260813.tar.gz` |
+| reCamera Pro native experiment/profile reports | canonical Pro source under `apps/fall-detection/{models,evaluation}/` | `/home/harvest/datasets/fall-detection/profiles/recamera-pro-rv1126b-yolo11n-pose-v1/` |
 
 ## Verified SG2002 live traces
 
@@ -35,6 +37,22 @@ was calculated independently on both machines after transfer.
 
 These are operational regression traces, not labelled accuracy material. The
 Mac source files were intentionally retained after backup.
+
+## Verified reCamera Pro evaluation assets
+
+The RV1126B device extracted all 160 GMDCSA clips with zero failures. The full
+trace archive was copied to Spark and independently SHA256-verified on both
+machines:
+
+- trace archive: `886dcde759c9a949073beecc1d06c0785f6e02b77bb3e1bf256192311743bf23`
+- native experiment profile: `4473e2af0fe5e47b03306bf9a866103a21dbdfceb794933034173bed53de6826`
+- frozen S4 report: `79046f3938213f797cd3f340914e94d17e55454a45bc083c4dc01bc177f4572c`
+- same-trace production-fallback report: `efc2e147c34ea9bf89f219df76b8275a6da6053d0e691182832650d11d2e8811`
+- pose-coverage report: `a4ac29d118379e86f15ebda240008c03f42c7bdb21a6151f5ba1eb8b87712616`
+
+The native experiment is retained for provenance but is not the deployed
+default: its clean-S4 Accuracy/F1 were 70.37%/69.23%, versus
+81.48%/81.48% for the existing fallback on the same Pro traces.
 
 The following digests describe the earlier core backup snapshot and therefore
 exclude the four per-file additions verified above. Keep them as provenance for

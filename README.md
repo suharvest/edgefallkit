@@ -85,7 +85,7 @@ production defaults.
 | RK3576/RK3588 | Python | MPP/RGA → RKNNLite → pybind11 decode/NMS | Published RC1; both boards pull-back verified |
 | Raspberry Pi 5 + Hailo-8 | Native runtime; Python-control migration documented | GStreamer → `hailonet` → native tensor decode | Published RC1; Pi pull-back verified |
 | reCamera SG2002 | Native C++ | CVI Runtime INT8 | appMgr package; OS 0.2.2 verified |
-| reCamera Pro | Python app | RV1126B RKNN | Package/tests complete; native target accuracy pending |
+| reCamera Pro | Python app | RV1126B RKNN | Signed package, live target, and frozen native/fallback S4 comparison verified |
 
 SG2002 intentionally remains native C++: adding Python would not improve its
 throughput or reliability. Hailo currently keeps the hot runtime native because
@@ -108,6 +108,11 @@ before making a capacity or accuracy claim.
 | RK3576 | YOLO11n-Pose RKNN FP16 | 14.90 FPS low stream | 65.74 ms pipeline | Validate 1–2 routes on final cameras |
 | RK3588 | YOLO11n-Pose RKNN FP16 | 14.67 FPS low stream | 83.20 ms pipeline | Validate 1–3 routes on final cameras |
 | Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 14.32 FPS single; 14.33+14.30 dual | 8.36 / 15.43 ms Hailo probe | 2 × 15 FPS verified |
+| reCamera Pro | YOLO11n-Pose RKNN INT8 | 13.05 FPS live WebSocket | 39.36 ms infer / 85.99 ms pipeline | 1 live camera verified |
+
+The 15 FPS rows are source-rate SLA checks, not a hardware ranking. Timing
+boundaries and known risks are documented in the
+[performance fairness audit](evaluation/PERFORMANCE_FAIRNESS.md).
 
 ### Frozen GMDCSA Subject 4
 
@@ -118,6 +123,8 @@ before making a capacity or accuracy claim.
 | Jetson YOLO11m optimized | 85.2% | 100% | 73.3% | 85.7% | 1.26 s |
 | RK3576 native temporal gate | 88.9% | 100% | 80.0% | 88.9% | 1.49 s |
 | RK3588 native temporal gate | 88.9% | 100% | 80.0% | 88.9% | 1.53 s |
+| reCamera Pro production fallback on Pro traces | 81.5% | 91.7% | 73.3% | 81.5% | 1.22 s |
+| reCamera Pro native experiment | 70.4% | 75.0% | 66.7% | 69.2% | 1.47 s |
 | Hailo-8 native temporal gate | 88.9% | 100% | 80.0% | 88.9% | 1.61 s |
 
 The clean test has 27 clips. RK/Hailo rows measure the frozen temporal gate;

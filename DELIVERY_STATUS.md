@@ -3,7 +3,7 @@
 Last audited: 2026-08-13 (Asia/Shanghai)
 
 This file distinguishes deployable engineering baselines from the remaining
-external-validation work. Jetson, RK3576, RK3588, Hailo-8 and SG2002 now have
+external-validation work. Jetson, RK3576, RK3588, Hailo-8, SG2002 and Pro now have
 frozen per-frontend temporal results; quote each result only with its documented
 frontend, split and temporal-gate/deployed-state-machine scope.
 
@@ -16,7 +16,7 @@ frontend, split and temporal-gate/deployed-state-machine scope.
 | RK3588 | Complete | Docker Compose; published RC1 | RK3588 `.rknn` (license HOLD) and native temporal `.npz` | registry pull-back, app/config smoke, MPP/RGA RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
 | Raspberry Pi 5 + Hailo-8 | Complete | Docker Compose; published RC1 | Hailo-8 `yolov8s_pose.hef` from official URL | registry pull-back, metadata smoke, single/dual RTSP, positive fall path, and MQTT v1 contract verified |
 | reCamera SG2002 | Complete in canonical repository | appMgr `.deb` | packaged CVI model | OS 0.2.2 live deployment, multi-person MQTT, and historical frozen accuracy verified |
-| reCamera Pro | Complete in canonical repository | Pro app package | packaged RV1126B RKNN model | deterministic fallback package and tests verified; no compatible Pro target exists in Fleet |
+| reCamera Pro | Complete in canonical repository | signed Pro app package | packaged RV1126B RKNN model and production fallback profile | firmware V1.0.4 appMgr install/signature verification, live camera/NPU/WebSocket, 60 s performance and strict native/fallback S4 comparison verified |
 
 Jetson production uses batch 1 with one execution context and CUDA stream per
 input. Static batch 4 remains a measured throughput experiment and is not
@@ -58,7 +58,9 @@ with `FALL_RK_IMAGE` set to this exact tag passed on both platform files.
 
 ## Remaining, non-blocking validation work
 
-- Run the delivered Pro trace/train/test pipeline on an RV1126B Pro device.
+- Optimize the Pro RGA preprocessing path and rerun the same-trace comparison;
+  the first native candidate overfit S3 and was not promoted over the stronger
+  production fallback.
 - Evaluate the RK3576, RK3588 and Hailo-8 frozen profiles on RealBiomFall; no
   external-set result is currently claimed for these three frontends.
 

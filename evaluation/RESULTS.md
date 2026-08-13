@@ -18,7 +18,7 @@
 | 平台 | 原生加速后端 | 可复现 Compose | MQTT contract | 真机性能 | GMDCSA S4 | RealBiomFall |
 |---|---|---|---|---|---|---|
 | reCamera SG2002 | CVI Runtime INT8 | N/A（固件/appMgr） | 已实现，待 schema fixture | 已有单路现场基线 | 74.1% Accuracy / 83.3% Recall | 58.8% Recall |
-| reCamera Pro | RKNN | N/A（Pro app packaging） | 已实现，待 schema fixture | blocked：Fleet 无 Pro 真机 | blocked：无 RV1126B trace | blocked：无 RV1126B trace |
+| reCamera Pro | RKNN | N/A（Pro app packaging） | 已实现；WS 真机字段已采集，MQTT schema fixture 待真机 broker | 已完成单路 live camera/NPU/WebSocket | production fallback 81.5% Accuracy / 91.7% Recall；native experiment 70.4% / 75.0% | N/A（未执行外部集评测） |
 | Jetson Orin Nano/NX | TensorRT 10.3 FP16 | 已有 | 已实现，fixture + 3,578 条真机 RTSP payload | 已完成 1/2/3/4/6 context + 单路 E2E | 已完成 | 已完成 |
 | RK3576 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 | RK3588 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成（含既有 NPU 负载） | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
@@ -33,6 +33,7 @@
 | 平台/设备 | 模型/精度 | 输入 | 路数 | 纯推理 ms / FPS | 完整 pipeline FPS / P95 | CPU | RSS | 加速器利用率 | 功耗 | Runtime 镜像 | 状态 |
 |---|---|---:|---:|---|---|---|---|---|---|---|---|
 | reCamera SG2002 / OS 0.2.2 | YOLO11n-Pose CVI INT8 | 640² | 1 | 52.96 mean / 53 P95 | 10.00 FPS / pending | pending | 11.6 MB | pending | pending | N/A（appMgr deb） | 无标注现场 200 帧 |
+| reCamera Pro / firmware V1.0.4 | YOLO11n-Pose RKNN INT8 | 640²（720p camera frame） | 1 | 35.89 mean / 39.36 P95 | 13.05 FPS；77.80 / 85.99 ms mean/P95 | N/A（appMgr未暴露进程CPU） | 836.6–839.9 MB system used | NPU 19–21% | N/A（无可靠口径） | N/A（signed appMgr package） | 783帧/60秒；温度51.2–52.5°C；现场仅3帧有人，不作Accuracy |
 | Orin Nano | YOLO11s-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 context | 14.76/14.79 ms E2E infer；context aggregate 69.66/71.12/70.07/70.15/70.85 FPS | 14.94 FPS / 69.63 ms 输出间隔 P95 | 11.08% E2E | 211.3 MiB E2E | 24.82% mean | 9.07 W mean | 206 MB disk / 51.8 MB content | MAXN_SUPER；15 FPS 核心边界 4 路 |
 | Orin NX | YOLO11m-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 context | 20.98/21.03 ms E2E infer；context aggregate 53.83/54.27/53.60/53.60/53.54 FPS | 15.02 FPS / 69.74 ms 输出间隔 P95 | 10.43% E2E | 126.7 MiB E2E | 28.48% mean | 13.85 W mean | 206 MB disk / 51.8 MB content | MAXN_SUPER；15 FPS 核心边界 3 路；本轮前无业务容器 |
 | RK3576 | YOLO11n-Pose RKNN FP16 | 640² | 1/2 context | 63.03 mean / 74.44 P95 | 15.15 FPS；65.73 / 77.98 ms | 63.1% snapshot | 174.4 MiB | Core0/1 36%/0% snapshot | N/A（无可靠口径） | 257,793,213 B | 4 人 bus 图；2ctx blank 29.15 FPS |
@@ -49,7 +50,8 @@ Subjects 1–3 重训/冻结其时序 profile，再只读 Subject 4 和外部集
 | reCamera v0.2 CVI | GMDCSA S4 | 10 | 2 | 10 | 5 | 74.1% | 83.3% | 66.7% | 66.7% | 74.1% | 1.75 s | frozen baseline |
 | Jetson YOLO11s optimized | GMDCSA S4 | 10 | 2 | 12 | 3 | 81.5% | 83.3% | 80.0% | 76.9% | 80.0% | 1.47 s | frozen |
 | Jetson YOLO11m optimized | GMDCSA S4 | 12 | 0 | 11 | 4 | 85.2% | 100% | 73.3% | 75.0% | 85.7% | 1.26 s | frozen |
-| reCamera Pro native profile | GMDCSA S4 | — | — | — | — | — | — | — | — | — | — | blocked：Fleet 无 RV1126B；不得用 RK3576/3588 代跑 |
+| reCamera Pro production fallback on Pro traces | GMDCSA S4 | 11 | 1 | 11 | 4 | 81.5% | 91.7% | 73.3% | 73.3% | 81.5% | 1.22 s | frozen comparator；production default；early alert 1 |
+| reCamera Pro native profile | GMDCSA S4 | 9 | 3 | 10 | 5 | 70.4% | 75.0% | 66.7% | 64.3% | 69.2% | 1.47 s | frozen experiment；early alerts 3；未promote |
 | RK3576 native profile | GMDCSA S4 | 12 | 0 | 12 | 3 | 88.9% | 100% | 80.0% | 80.0% | 88.9% | 1.49 s | frozen；独立 RK3576 traces |
 | RK3588 native profile | GMDCSA S4 | 12 | 0 | 12 | 3 | 88.9% | 100% | 80.0% | 80.0% | 88.9% | 1.53 s | frozen；独立 RK3588 traces |
 | Hailo-8 native temporal gate | GMDCSA S4 | 12 | 0 | 12 | 3 | 88.9% | 100% | 80.0% | 80.0% | 88.9% | 1.61 s | frozen；pose coverage 92.02% |
@@ -155,7 +157,7 @@ stream-global fall event。循环事件数只证明 RTSP→TRT→tracker→tempo
 | 平台 | 多人独立轨迹/状态 | 优化时序权重 | 可比较最终测试 |
 |---|---|---|---|
 | reCamera SG2002 | 已实现 | 仍为原 v0.2/CVI profile | 有原 v0.2 baseline |
-| reCamera Pro | 已实现 | 原生 MLP 抽 trace/冻结/S4 只读流水线已交付；当前仍是 Jetson transfer fallback | blocked：Fleet 无 RV1126B 真机 |
+| reCamera Pro | 已实现 | 原生 MLP 已冻结/测试；同一 Pro traces 上 fallback 更优，故继续作为生产默认 | S4 native/fallback 均已完成 |
 | Jetson Orin | 已实现 | YOLO11s/m 独立 profile 已冻结 | 已完成 |
 | Raspberry Pi 5 + Hailo-8 | 已实现原生 HailoRT 运行时 | Hailo YOLOv8s-Pose 独立 profile 已冻结并编译 | S4 temporal gate 已完成；deployed state-machine accuracy 未单独评估 |
 | RK3576 | 已实现原生 RKNN Lite 多路运行时 | RK3576 独立 profile 已冻结并部署 | S4 temporal gate 已完成；deployed state-machine accuracy 未单独评估 |
@@ -231,11 +233,18 @@ S1-3 refit、冻结 checkpoint/哈希、S4 只读 test 和 NumPy-only gzip JSON 
 部署侧依旧只有 NumPy，不需要 Torch、Ultralytics 或 sklearn；这些库只在训练主机
 拟合 MLP 时使用。
 
-Fleet 清单中没有 reCamera Pro。`cat-remote` 是 RK3576，`radxa` 是 RK3588；
-RV1126B 专用 RKNN artifact 不假设能跨 SoC 运行。因此当前没有生成
-`temporal_recamera_pro_rknn_v1.json.gz`，没有填写 Pro Accuracy，状态明确为
-`blocked_no_compatible_fleet_target`。完整命令和阻塞清单见 Pro app README 与
-`evaluation/native-profile-status.json`。
+Fleet 现已有临时 RV1126B Pro 测试机。固件 V1.0.4 上通过官方 appMgr 单活切换、
+签名校验和安装了完整四文件 0.2.0 包；60 秒 live camera→RKNN→tracker/temporal→
+WebSocket 采集得到 783 帧、13.05 FPS，推理 mean/P95 35.89/39.36 ms，完整 pipeline
+mean/P95 77.80/85.99 ms，NPU 19–21%，温度 51.2–52.5°C。现场仅 3 帧检出人物且
+没有跌倒边沿，所以这只是真机性能/功能证据，不是 Accuracy。原始证据与口径见
+[`reports/recamera-pro-live-v0.2.0-20260813.json`](reports/recamera-pro-live-v0.2.0-20260813.json)。
+
+严格协议已完成 160/160 clips。原生 profile 在 clean S4 为 TP9/FN3/TN10/FP5，
+Accuracy 70.37%、Recall 75%、F1 69.23%，early alerts 3；同一 Pro traces 上现有
+fallback 为 TP11/FN1/TN11/FP4，Accuracy/F1 81.48%、Recall 91.67%，early alert 1。
+因此生产默认保持 fallback，原生 profile 仅保留作审计实验。全体 pose coverage
+87.27%，S4 Fall 72.84%，明显低于 ADL 91.77%，是下一轮前端/RGA预处理优化重点。
 
 ## reCamera 0.2.2 真机运行基线
 

@@ -326,6 +326,7 @@
       "Recompile with performance_param(compiler_optimization_level=max) and a relaxed resources_param ceiling, so the allocator searches harder for a 1- or 2-context fit. Context 2 holds only 16.6% compute and looks mergeable. Costs compile time, no code change. Exact parameter names to be checked against the installed DFC.",
       "Concatenate the 9 raw heads into 3 (one per scale) to cut output-stream and control pressure. Requires changing the ONNX end nodes and the host decoder.",
       "Raise batch size: throughput only, and it caps out at half the s build."
-    ]
+    ],
+    "latency_vs_throughput": "The two figures separate. Per-frame latency is the same order: 9.01 ms for n against 6.87 ms for s, +31%. The 4.3x gap is throughput only (92.2 vs 393.9 FPS), which is where the per-frame context switch is paid. Against this solution's actual load - one stream at 15 FPS - the n build still holds about 6x headroom, so the gap bounds stream density rather than single-stream viability."
   }
 }

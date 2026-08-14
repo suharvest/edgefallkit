@@ -204,7 +204,7 @@ INT8、64 帧 GMDCSA 标定、raw head），在 `harvest-pi` 上停掉 `mcp_face
 | YOLO11n-Pose（自编译） | 3 | 92.20 | 9.01 ms |
 | YOLOv8s-Pose（Model Zoo v2.15） | 1 | 393.90 | 6.87 ms |
 
-更小的模型慢 4.3 倍。`hailortcli parse-hef` 给出原因：11n 被切成 3 个 context，每帧换一次
+两个数要分开看：**单帧延迟同量级（9.01 vs 6.87 ms，+31%），差 4.3 倍的是吞吐**。按单路 15 FPS 的部署需求，n 的 92.2 FPS 仍有约 6 倍余量，差距只在多路密度上体现。`hailortcli parse-hef` 给出原因：11n 被切成 3 个 context，每帧换一次
 权重；s 尺寸是 single context，权重常驻。编译期已经有征兆——总算力占用只有 16.6%，
 cluster_2 的 control 利用率却已 100%。所以这个数字反映的是该 HEF 的资源分配，不是
 Hailo-8 跑 11n 的上限。部署配置维持 YOLOv8s：又快、模型又大。

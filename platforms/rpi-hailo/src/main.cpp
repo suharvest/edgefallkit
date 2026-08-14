@@ -30,13 +30,15 @@ mosquitto*mqtt=nullptr;
 #endif
 std::string topic;float score=.35f,kpt=.25f;std::vector<std::unique_ptr<Stream>> streams;GMainLoop*loop=nullptr;};
 
-std::string payload(Stream&s,const std::vector<rpi_hailo::Track*>& ps,float pipeline_ms){
+std::string payload(Stream&s,const std::vector<rpi_hailo::Track*>& ps,float pipeline_ms,float decode_ms=0.f,float track_ms=0.f,float pipeline_full_ms=0.f){
   int fallen=0,event_edges=0;const rpi_hailo::Track*primary=nullptr;const char*state="normal";
   for(auto&p:s.tracker.tracks()){fallen+=p->output.fall_detected;event_edges+=p->output.fall_event?1:0;if(p->output.state==jetson_fall::FallState::Fallen)state="fallen";else if(std::string(state)=="normal"&&p->output.state==jetson_fall::FallState::Recovering)state="recovering";else if(std::string(state)=="normal"&&p->output.state==jetson_fall::FallState::Suspected)state="suspected";}
   s.global_event_id+=event_edges;
   for(auto*p:ps)if(!primary||p->score>primary->score)primary=p;
   std::ostringstream o;o<<std::fixed<<std::setprecision(4)<<"{\"timestamp\":"<<epochMs()<<",\"frame_id\":"<<s.frames
-    <<",\"pipeline_ms\":"<<pipeline_ms<<",\"pipeline_time_ms\":"<<pipeline_ms<<",\"inference_time_ms\":0.0,\"inference_time_metric\":\"unavailable\",\"latency_metric\":\"pre_hailonet_to_hailonet_src\",\"stream_id\":\""<<jsonEscape(s.id)<<"\",\"fall_detected\":"<<(fallen?"true":"false")
+    <<",\"pipeline_ms\":"<<pipeline_ms<<",\"pipeline_time_ms\":"<<pipeline_ms
+    <<",\"decode_ms\":"<<decode_ms<<",\"track_ms\":"<<track_ms<<",\"pipeline_full_ms\":"<<pipeline_full_ms
+    <<",\"pipeline_full_metric\":\"pre_hailonet_to_post_tracker\",\"inference_time_ms\":0.0,\"inference_time_metric\":\"unavailable\",\"latency_metric\":\"pre_hailonet_to_hailonet_src\",\"stream_id\":\""<<jsonEscape(s.id)<<"\",\"fall_detected\":"<<(fallen?"true":"false")
     <<",\"fall_event\":"<<(event_edges?"true":"false")<<",\"event_id\":"<<s.global_event_id<<",\"event_id_scope\":\"stream_global_event_id\",\"global_event_id\":"<<s.global_event_id<<",\"state\":\""<<state<<"\",\"person_detected\":"<<(!ps.empty()?"true":"false")
     <<",\"person_count\":"<<ps.size()<<",\"fallen_count\":"<<fallen<<",\"tracking\":"<<(!s.tracker.tracks().empty()?"true":"false")<<",\"persons\":[";
   bool first=true;for(auto&owned:s.tracker.tracks()){auto*p=owned.get();if(!first)o<<',';first=false;o<<"{\"track_id\":"<<p->id<<",\"person_detected\":"<<(p->missed==0?"true":"false")<<",\"person_score\":"<<p->score
@@ -60,8 +62,10 @@ GstPadProbeReturn outProbe(GstPad*,GstPadProbeInfo*info,gpointer data){
   while((meta=gst_buffer_iterate_meta_filtered(buf,&state,GST_PARENT_BUFFER_META_API_TYPE))){auto*p=reinterpret_cast<GstParentBufferMeta*>(meta);GstMapInfo mi{};
     if(!gst_buffer_map(p->buffer,&mi,GST_MAP_READ))continue;auto*tm=GST_TENSOR_META_GET(p->buffer);if(tm){maps.push_back({p->buffer,mi});tensors.push_back({mi.data,tm->info});}else gst_buffer_unmap(p->buffer,&mi);}
   const double t=now();auto ds=rpi_hailo::decodeYoloV8Pose(tensors,s.app->score,.7f);for(auto&m:maps)gst_buffer_unmap(m.b,&m.m);
-  auto persons=s.tracker.update(ds,t);++s.frames;float latency=float((t-s.input_at.load())*1000.);s.latency_sum+=latency;
-  auto json=payload(s,persons,latency);auto topic=replace(s.app->topic,"{stream_id}",s.id);
+  const double t_decoded=now();
+  auto persons=s.tracker.update(ds,t);const double t_tracked=now();++s.frames;const double in_at=s.input_at.load();float latency=float((t-in_at)*1000.);s.latency_sum+=latency;
+  float decode_ms=float((t_decoded-t)*1000.);float track_ms=float((t_tracked-t_decoded)*1000.);float pipeline_full_ms=float((t_tracked-in_at)*1000.);
+  auto json=payload(s,persons,latency,decode_ms,track_ms,pipeline_full_ms);auto topic=replace(s.app->topic,"{stream_id}",s.id);
 #ifdef HAVE_MOSQUITTO
   if(s.app->mqtt)mosquitto_publish(s.app->mqtt,nullptr,topic.c_str(),json.size(),json.data(),0,false);
 #else

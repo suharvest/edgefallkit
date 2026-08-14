@@ -152,6 +152,51 @@ stream-global fall event。循环事件数只证明 RTSP→TRT→tracker→tempo
 →payload 路径，不是 Accuracy/Recall。输出间隔 P95 也不是 source-to-MQTT 延迟。
 本轮 NX 开始前和结束后 Docker 业务集合均为空，没有停止任何 NX 业务。
 
+## 跨平台同模型对比：YOLO11n-Pose 640²（2026-08-14）
+
+此前 Jetson 只测过 YOLO11s/11m，而 RK 与 reCamera 跑的是 YOLO11n，横向数字比的是
+「平台+模型」而不是平台。这一轮把模型固定成 YOLO11n-Pose 640² 重测。方法与既有行一致：
+Jetson 用 `trtexec --useCudaGraph --noDataTransfers --infStreams=N`，RK 用
+`platforms/rknn/benchmark.py` 空白 640 输入、迭代数与 FP16 基线相同。单帧均为加速器
+推理耗时，不含 RTSP 解码、letterbox、跟踪、时序 MLP 与 MQTT。
+
+| 平台 | 精度 | 单帧 | 1 ctx | 3 ctx | 6 ctx | 备注 |
+|---|---|---:|---:|---:|---:|---|
+| Orin Nano | FP16 | 3.69 ms | 270.7 | 274.9 | 263.0 | 停业务 |
+| Orin NX | FP16 | 3.26 ms | 306.2 | 283.3 | 287.8 | 停业务 |
+| Orin Nano | INT8＊ | 2.75 ms | 363.9 | 387.5 | 351.8 | 停业务；未标定 |
+| Orin NX | INT8＊ | 2.45 ms | 408.0 | 425.4 | 393.6 | 停业务；未标定 |
+| Orin Nano | FP16 | 3.69 ms | 270.5 | 270.3 | 264.9 | 业务共存（对照） |
+| Orin NX | FP16 | 3.77 ms | 264.9 | 245.2 | 245.2 | 业务共存（对照） |
+| RK3588 | FP16 | 51.41 ms | 19.25 | 51.40 | — | 既有基线 |
+| RK3588 | INT8 | 29.78 ms | 32.43 | 90.36 | — | w8a8，240 帧标定 |
+| RK3576 | FP16 | 56.13 ms | 17.50 | — | — | 既有基线；2 ctx 29.15 |
+| RK3576 | INT8 | 36.23 ms | 26.97 | — | — | w8a8；2 ctx 42.05 |
+
+＊ Jetson 的 INT8 引擎由 `trtexec --int8` 直接构建，**没有标定器也没有标定集**，动态范围
+是随意取的：只能用于看内核速度，检测结果不可用，不是可部署配置。`build_engine.sh` 只传
+`--fp16`；要做真正的 INT8 需要在项目里实现标定器与标定集，并在 INT8 姿态输出上重新冻结
+时序权重。
+
+**只有占用加速器的共存业务才会影响数字，一旦影响就可能把排序颠倒。** Orin NX 在自身跑着
+GPU 推理业务时 FP16 测得 264.9 FPS，低于 Orin Nano，与两者算力关系相反；停掉后是
+306.2 FPS。Orin Nano 停与不停完全一致（270.5 对 270.7），因为它上面的 openclaw /
+warehouse / face_rec 都不碰 GPU。同一效应让 Orin NX 上 INT8 单 context 首次测得
+4.55 ms——比自己的 FP16 还慢，看上去像 INT8 在 Jetson 上退化；空闲下是 2.45 ms。
+结论：跨板对比必须在停掉占用加速器的业务后进行。
+
+**RKNN INT8 是净收益。** 两块板都快 1.4–1.8 倍，且在 8 张**未参与标定**的 GMDCSA 帧上，
+每帧检测数与 FP16 完全一致（1.12 vs 1.12），框相差约 1 px、分数相差 ±0.04。唯一可测的
+退化是一个画面边缘的部分人体（0.391→0.358，可见关键点 2/17→0/17），它在 FP16 下也几乎
+没有可用姿态。注意：这只是 8 帧的逐帧一致性，**没有算 mAP，也没有在 INT8 轨迹上重跑冻结
+的 Subject 4 门限**，因此不能直接沿用 FP16 的准确率数字。
+
+固定模型且停掉占用加速器的业务后，边缘板卡的排序为：Orin NX 3.26 ms ＞ Orin Nano
+3.69 ms ＞ RK3588 51.4 ms ＞ reCamera 2002 53.0 ms，Jetson 单帧约为 RK3588 的 1/15。
+Jetson 的总吞吐在 1–6 个 context 下几乎不变，说明并发共享同一份 GPU 预算而不是线性倍增。
+
+原始数据：[`reports/yolo11n-crossplatform-20260814.json`](reports/yolo11n-crossplatform-20260814.json)
+
 ## reCamera / reCamera Pro 状态
 
 | 平台 | 多人独立轨迹/状态 | 优化时序权重 | 可比较最终测试 |

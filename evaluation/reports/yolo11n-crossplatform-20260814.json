@@ -1,0 +1,241 @@
+{
+  "report": "yolo11n-crossplatform-20260814",
+  "purpose": "Hold the pose model constant at YOLO11n-Pose 640x640 across every platform so the numbers describe the device rather than the device-plus-model. Previously Jetson was only ever benchmarked on YOLO11s/11m while RK and reCamera ran YOLO11n, which made the platforms incomparable.",
+  "accuracy_claim": false,
+  "method": {
+    "jetson": "trtexec --useCudaGraph --noDataTransfers --infStreams=N --duration=10 --warmUp=2000, fixed 1x3x640x640, batch=1 per context. Same flags as the existing YOLO11s/11m rows in RESULTS.md.",
+    "rknn": "platforms/rknn/benchmark.py, blank 640 input, --postprocess-backend cpp, same iteration counts as the FP16 baselines (100 on RK3588, 200 on RK3576).",
+    "note": "Per-frame figures are accelerator inference only. They exclude RTSP decode, letterbox, tracking, the temporal MLP and MQTT."
+  },
+  "jetson": {
+    "model": "yolo11n-pose",
+    "onnx_bytes": 11832127,
+    "precision_fp16": {
+      "engine_bytes": {
+        "orin_nano": 9358652,
+        "orin_nx": 9365028
+      },
+      "orin_nano_coresident": {
+        "note": "openclaw-gateway, mcp_warehouse and mcp_face_rec left running, matching the co-existing-capacity basis used for the YOLO11s/11m rows",
+        "contexts": {
+          "1": {
+            "aggregate_fps": 270.516,
+            "mean_ms": 3.69391
+          },
+          "2": {
+            "aggregate_fps": 266.403,
+            "mean_ms": 7.49793
+          },
+          "3": {
+            "aggregate_fps": 270.339,
+            "mean_ms": 11.0789
+          },
+          "4": {
+            "aggregate_fps": 263.616,
+            "mean_ms": 15.1439
+          },
+          "6": {
+            "aggregate_fps": 264.891,
+            "mean_ms": 22.6145
+          }
+        }
+      },
+      "orin_nx_coresident": {
+        "contexts": {
+          "1": {
+            "aggregate_fps": 264.925,
+            "mean_ms": 3.77222
+          },
+          "2": {
+            "aggregate_fps": 252.812,
+            "mean_ms": 7.89816
+          },
+          "3": {
+            "aggregate_fps": 245.19,
+            "mean_ms": 12.219
+          },
+          "4": {
+            "aggregate_fps": 253.179,
+            "mean_ms": 15.7765
+          },
+          "6": {
+            "aggregate_fps": 245.241,
+            "mean_ms": 24.4086
+          }
+        }
+      },
+      "orin_nx_idle": {
+        "note": "all co-resident containers stopped for the duration, then restarted",
+        "contexts": {
+          "1": {
+            "aggregate_fps": 306.154,
+            "mean_ms": 3.26376
+          },
+          "3": {
+            "aggregate_fps": 283.314,
+            "mean_ms": 10.5779
+          },
+          "6": {
+            "aggregate_fps": 287.821,
+            "mean_ms": 20.806
+          }
+        }
+      },
+      "orin_nano_idle": {
+        "note": "openclaw-gateway, mcp_warehouse and mcp_face_rec stopped for the run, then restarted and verified healthy",
+        "contexts": {
+          "1": {
+            "aggregate_fps": 270.727,
+            "mean_ms": 3.69129
+          },
+          "3": {
+            "aggregate_fps": 274.853,
+            "mean_ms": 10.9027
+          },
+          "6": {
+            "aggregate_fps": 262.988,
+            "mean_ms": 22.7765
+          }
+        }
+      }
+    },
+    "precision_int8_uncalibrated": {
+      "deployable": false,
+      "why_not": "Built with trtexec --int8 --fp16 and NO calibrator or calibration cache, so TensorRT assigns arbitrary dynamic ranges. Valid for kernel timing, worthless for detection. build_engine.sh passes only --fp16; a real INT8 path needs a calibrator plus calibration set implemented in this project, and the temporal profile would then have to be re-frozen on INT8 pose output.",
+      "engine_bytes": {
+        "orin_nano": 4857748,
+        "orin_nx": 4811604
+      },
+      "orin_nano_coresident": {
+        "contexts": {
+          "1": {
+            "aggregate_fps": 364.294,
+            "mean_ms": 2.74238
+          },
+          "3": {
+            "aggregate_fps": 389.489,
+            "mean_ms": 7.675
+          },
+          "6": {
+            "aggregate_fps": 358.07,
+            "mean_ms": 16.7231
+          }
+        }
+      },
+      "orin_nx_idle": {
+        "contexts": {
+          "1": {
+            "aggregate_fps": 408.032,
+            "mean_ms": 2.44849
+          },
+          "3": {
+            "aggregate_fps": 425.362,
+            "mean_ms": 7.04098
+          },
+          "6": {
+            "aggregate_fps": 393.563,
+            "mean_ms": 15.2171
+          }
+        }
+      },
+      "speedup_vs_fp16_idle_orin_nx": 1.33,
+      "orin_nano_idle": {
+        "contexts": {
+          "1": {
+            "aggregate_fps": 363.915,
+            "mean_ms": 2.74522
+          },
+          "3": {
+            "aggregate_fps": 387.542,
+            "mean_ms": 7.71517
+          },
+          "6": {
+            "aggregate_fps": 351.816,
+            "mean_ms": 17.0248
+          }
+        }
+      }
+    },
+    "contention_finding": "Contention only matters when the co-resident workload uses the accelerator, and when it does it can invert the ranking. Orin NX measured 264.9 FPS FP16 while running its own GPU inference stack - below Orin Nano, the opposite of the two modules' relative capability; with that stack stopped it is 306.2 FPS. Orin Nano measured identically idle and co-resident (270.5 vs 270.7 FPS) because openclaw-gateway, mcp_warehouse and mcp_face_rec never touch the GPU. The same effect made the first INT8 reading on a busy Orin NX come out at 4.55 ms, slower than its own FP16, which would have read as INT8 being a regression on Jetson; idle it is 2.45 ms."
+  },
+  "rknn_int8": {
+    "deployable": true,
+    "quantization": "w8a8, rknn-toolkit2 2.3.2, quantized_algorithm normal, optimization_level 3",
+    "calibration": {
+      "frames": 240,
+      "source": "GMDCSA-24, letterboxed to 640x640 exactly as platforms/rknn/video_source.py does (aspect_fit_geometry + pad_scaled_rgb, INTER_LINEAR, pad value 114, centred)",
+      "spread": "subjects 1-4, ADL and Fall, 3 evenly spaced frames per clip; the other 240 frames of the extraction were held out for the sanity check"
+    },
+    "artifacts": {
+      "rk3576": {
+        "bytes": 7699085,
+        "sha256": "5f7d3f00f232a2a0f19bec14cf3fd4271f556e65f7cba1102904373880e6a028"
+      },
+      "rk3588": {
+        "bytes": 4581837,
+        "sha256": "9b273972801fcfbc172271375507f3901678b185ae585939adb466f2aabe2ab6"
+      }
+    },
+    "rk3588_radxa": {
+      "iterations": 100,
+      "contexts": {
+        "1": {
+          "int8_fps": 32.43,
+          "int8_mean_ms": 29.78,
+          "fp16_fps": 19.25,
+          "fp16_mean_ms": 51.41
+        },
+        "2": {
+          "int8_fps": 67.01,
+          "int8_mean_ms": 28.29,
+          "fp16_fps": 38.13,
+          "fp16_mean_ms": 51.43
+        },
+        "3": {
+          "int8_fps": 90.36,
+          "int8_mean_ms": 31.2,
+          "fp16_fps": 51.4,
+          "fp16_mean_ms": 56.68
+        }
+      },
+      "speedup": "1.68-1.76x"
+    },
+    "rk3576_cat_remote": {
+      "iterations": 200,
+      "contexts": {
+        "1": {
+          "int8_fps": 26.97,
+          "int8_mean_ms": 36.23,
+          "fp16_fps": 17.5,
+          "fp16_mean_ms": 56.13
+        },
+        "2": {
+          "int8_fps": 42.05,
+          "int8_mean_ms": 45.78,
+          "fp16_fps": 29.15,
+          "fp16_mean_ms": 67.1
+        }
+      },
+      "speedup": "1.44-1.54x"
+    },
+    "detection_sanity": {
+      "frames": 8,
+      "selection": "held out of the calibration set; one Fall and one ADL per subject",
+      "detections_per_frame": {
+        "fp16": 1.12,
+        "int8": 1.12
+      },
+      "verdict": "Identical detection counts on every frame on both boards. Boxes agree within about 1 px, scores within +/-0.04, and visible-keypoint counts match on all high-confidence detections.",
+      "caveats": [
+        "subject-3_Fall_01_1.jpg yields 0 detections at FP16 as well; a pre-existing miss, not an INT8 regression.",
+        "One marginal edge-of-frame partial person degrades: score 0.391 -> 0.358 and visible keypoints 2/17 -> 0/17. The box is still emitted; its pose was near-worthless at FP16 too."
+      ],
+      "not_measured": "This is per-frame detection agreement on 8 frames, not an evaluation-set score. No mAP and no fall-detection F1 was computed for the INT8 weights, and the frozen Subject-4 gate has NOT been re-run on INT8 traces."
+    }
+  },
+  "conclusions": [
+    "With the model held constant at YOLO11n and co-resident GPU workloads stopped, Orin NX is the fastest of the edge boards (3.26 ms), followed by Orin Nano (3.69 ms), then RK3588 (51.4 ms) and reCamera 2002 (53.0 ms). That ordering was previously wrong in two ways: Jetson was benchmarked on a heavier model, and contended NX measured below Nano.",
+    "Jetson aggregate throughput is essentially flat from 1 to 6 concurrent contexts, so extra contexts split one GPU budget rather than adding capacity.",
+    "RKNN INT8 is a free win on both boards: 1.4-1.8x faster with no change in detections-per-frame on held-out real frames. Shipping it still requires re-running the frozen Subject-4 gate, because the temporal profile was frozen against FP16 pose output."
+  ]
+}

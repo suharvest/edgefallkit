@@ -205,9 +205,14 @@ class GStreamerMPP:
         sample = self.sink.emit("try-pull-sample", self.timeout_ns)
         if sample is None:
             error = self._bus_error()
-            self.close()
             if error:
+                self.close()
                 raise error
+            # A pull that simply timed out is not fatal. Tearing the pipeline
+            # down here meant the next read() rebuilt the RTSP connection from
+            # scratch, which cannot finish inside one appsink timeout either --
+            # so MPP never survived its own startup and every deployment fell
+            # back to CPU decode.
             return None
         sample_caps = sample.get_caps()
         caps = sample_caps.get_structure(0)

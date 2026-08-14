@@ -328,5 +328,48 @@
       "Raise batch size: throughput only, and it caps out at half the s build."
     ],
     "latency_vs_throughput": "The two figures separate. Per-frame latency is the same order: 9.01 ms for n against 6.87 ms for s, +31%. The 4.3x gap is throughput only (92.2 vs 393.9 FPS), which is where the per-frame context switch is paid. Against this solution's actual load - one stream at 15 FPS - the n build still holds about 6x headroom, so the gap bounds stream density rather than single-stream viability."
+  },
+  "recamera_pro_dvfs": {
+    "board": "reCamera Pro (Rockchip RV1126B)",
+    "why": "The published 35.89 ms baseline could not be reproduced: a fresh capture measured 43.12 ms. The cause is frequency bin, not contention.",
+    "npu_governor": "rknpu_ondemand",
+    "npu_freq_observed_hz": 800000000,
+    "npu_freq_ceiling_hz": 950000000,
+    "npu_freq_samples": "60/60 at 800 MHz over 30 s",
+    "cpu_governor_default": "interactive",
+    "cpu_freq_default_hz": 1008000,
+    "cpu_freq_ceiling_hz": 1608000,
+    "measurements": {
+      "as_found_800mhz": {
+        "frames": 379,
+        "frames_with_people": 2,
+        "infer_mean_ms": 43.12,
+        "infer_median_ms": 41.3,
+        "infer_p95_ms": 51.82,
+        "infer_min_ms": 34.1,
+        "infer_max_ms": 59.74,
+        "metrics_pre_ms": 0.02,
+        "metrics_infer_ms": 42.93,
+        "metrics_post_ms": 2.07,
+        "pipeline_ms": 45.01
+      },
+      "pinned_950mhz": {
+        "how": "min_freq raised to 950000000, CPU governor set to performance (1608 MHz); both restored to 396000000 / interactive after the run",
+        "frames": 382,
+        "frames_with_people": 3,
+        "infer_mean_ms": 35.18,
+        "infer_median_ms": 34.75,
+        "infer_p95_ms": 38.11,
+        "infer_min_ms": 33.33,
+        "infer_max_ms": 47.07,
+        "metrics_pre_ms": 0.0,
+        "metrics_infer_ms": 35.21,
+        "metrics_post_ms": 1.34,
+        "pipeline_ms": 36.56
+      }
+    },
+    "finding": "23% spread on frequency bin alone, and the pinned figure reproduces the frozen 35.89 ms baseline to within 2%. Frequency-scaled prediction from the as-found reading (43.12 x 800/950 = 36.3 ms) also lands on it. Any Pro number published without stating the NPU frequency is unreproducible.",
+    "other_boards_checked": "RK3588 held 1000 MHz for 40/40 samples and RK3576 held 950 MHz for 40/40, both at their ceiling, so the RK rows are unaffected even though platforms/rknn/benchmark.py never touches governors. Jetson figures are recorded at MAXN_SUPER; Hailo has no DVFS layer.",
+    "load_average_note": "The board shows load average ~13 on 4 cores, which is not contention: roughly a dozen Rockchip media threads (vvi_thread, venc, vpss, vrga, valloc, vlog) sit permanently in uninterruptible D state and Linux counts those in the load average. Actual CPU was ~23% total (app 55.7% of one core, rkipc 28.7%)."
   }
 }

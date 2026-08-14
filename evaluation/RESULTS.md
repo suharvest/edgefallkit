@@ -310,6 +310,34 @@ native runtime 并在 Pi 上重新编译，逻辑/contract 2/2 通过。采集�
 不能直接冒充 CVI INT8 或 Pro profile。后续应分别用两端真实 pose 输出抽取
 Subjects 1–3 traces、重新训练，然后只在冻结后读取 Subject 4。
 
+## reCamera Pro 频率档位对性能的影响（2026-08-14）
+
+复测 35.89 ms 基线时先测出 43.12 ms。原因是频率档位，不是争用。
+
+Pro 的 NPU 用 `rknpu_ondemand`，30 秒内 60/60 采样都停在 **800 MHz**（上限 950）；CPU
+`interactive`，跑在 1008 MHz（上限 1608）。把 `min_freq` 顶到 950 MHz、CPU 切
+`performance` 后复测：
+
+| 状态 | 帧数 | infer mean | median | p95 | pre/infer/post | pipeline |
+|---|---:|---:|---:|---:|---|---:|
+| 默认 800 MHz | 379 | 43.12 ms | 41.30 | 51.82 | 0.02 / 42.93 / 2.07 | 45.01 ms |
+| 锁定 950 MHz | 382 | 35.18 ms | 34.75 | 38.11 | 0.00 / 35.21 / 1.34 | 36.56 ms |
+
+**同一块板仅因频率档位就差 23%**，锁频后与冻结基线 35.89 一致（差 2%）；按频率折算的预测值
+43.12 × 800/950 = 36.3 ms 也落在同一点。因此 Pro 的任何数字不写明 NPU 频率就不可复现。
+测完已还原为 `min_freq=396000000` + `interactive`。
+
+两块 RK 不受影响：RK3588 40/40 采样稳在 1000 MHz、RK3576 40/40 稳在 950 MHz，都是各自上限
+——尽管 `platforms/rknn/benchmark.py` 从未设置过 governor。Jetson 记录的是 MAXN_SUPER，
+Hailo 没有这一层。
+
+场景说明：两轮都近乎空场（有人帧 2/379 与 3/382），所以 post 一列偏低。Pro 与 RK 同属
+RKNN 路径，后处理随人数增长（RK3576 4 人画面 2.7 ms、空白帧 0.4 ms）。
+
+附：该板 load average 约 13（四核）**不是负载**。十几个 Rockchip 媒体线程（`vvi_thread`、
+`venc`、`vpss`、`vrga`、`valloc`、`vlog`）常驻不可中断 D 态，Linux 把 D 态计入 load average。
+实际 CPU 总占用约 23%（应用 55.7%、`rkipc` 28.7%，均为单核百分比）。
+
 ## reCamera Pro 原生时序 MLP 状态（2026-08-13）
 
 这里的“前端重训”不是重新训练 YOLO Pose，而是固定 Pro 的

@@ -418,6 +418,31 @@ COCO 肩/髋关键点覆盖不足；下一步应保存视频和 CVI pose trace�
 [`../assets/ASSET_LOCATIONS.md`](../assets/ASSET_LOCATIONS.md) 的约定备份到 Spark，
 记录 SHA256 后再更新本台账。
 
+## RK3588 硬件解码（MPP）与 CPU 解码对照（2026-08-14）
+
+用 cgroup 累计 CPU 计时（`cpu.stat` 的 `usage_usec`）而非采样 `docker stats`——后者对这种
+突发负载不可用，同一组里样本从 60% 跳到 352%。各预热 60 秒跳过启动突发，再测 60 秒：
+
+| backend | 核数 | 吞吐 | 单帧 CPU |
+|---|---:|---:|---:|
+| gstreamer_mpp | 2.61 | 12.83 fps | **203.5 ms** |
+| opencv_ffmpeg | 3.00 | 14.75 fps | **203.7 ms** |
+
+**单帧成本差 0.1%。** MPP 少占的 13% CPU 完全等于它少处理的 13% 帧数，硬件解码在单帧成本上
+没有收益——203 ms 里绝大部分是推理、后处理、跟踪、时序与 MQTT，解码本身占比很小。
+
+两条路径的差异是缓冲策略而非解码性能：MPP 走 appsink `max-buffers=1 drop=true`，应用忙时
+丢帧、保低延迟；ffmpeg 走 `cv2.VideoCapture` 的内部队列，每帧都处理、延迟累积。对本方案的
+含义是**换到 MPP 会少占约一个核，代价是丢约 13% 的帧**，不是净赚。时序模型用 48 帧 /
+3.2 秒窗口，帧密度下降对准确率的影响**未测**。
+
+解码器自身稳态不丢帧：`gst-launch` 直连 `fakesink` 测得 20 秒内 delivered 263 + out-dated
+discards 19 = 282，与源在该窗口的 284 帧相符；19 次丢弃全部集中在 0:00:02.560 一个时间点，
+是启动时清积压追实时的一次性行为。源速率实测 14.2 fps（在解码器之前的 parser 出口测）。
+
+抖动缓冲不是因素：`latency=100/500`、`drop-on-latency=true/false` 三种组合分别为
+12.5 / 12.8 / 12.9 fps。
+
 ## Rockchip RKNN 真机性能（2026-08-13）
 
 两平台共用 `platforms/rknn`：Python 仅做多流编排、MQTT、多人 tracker、

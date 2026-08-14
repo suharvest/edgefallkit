@@ -5,7 +5,8 @@
   "method": {
     "jetson": "trtexec --useCudaGraph --noDataTransfers --infStreams=N --duration=10 --warmUp=2000, fixed 1x3x640x640, batch=1 per context. Same flags as the existing YOLO11s/11m rows in RESULTS.md.",
     "rknn": "platforms/rknn/benchmark.py, blank 640 input, --postprocess-backend cpp, same iteration counts as the FP16 baselines (100 on RK3588, 200 on RK3576).",
-    "note": "Per-frame figures are accelerator inference only. They exclude RTSP decode, letterbox, tracking, the temporal MLP and MQTT."
+    "note": "Per-frame figures are accelerator inference only. They exclude RTSP decode, letterbox, tracking, the temporal MLP and MQTT.",
+    "hailo": "hailortcli benchmark --time-to-run 15, on an idle Hailo-8 (co-resident mcp_face_rec stopped for the run, restarted after). Reports FPS hw_only/streaming and HW latency; accelerator only, same basis as the trtexec and rknn rows."
   },
   "jetson": {
     "model": "yolo11n-pose",
@@ -236,6 +237,33 @@
   "conclusions": [
     "With the model held constant at YOLO11n and co-resident GPU workloads stopped, Orin NX is the fastest of the edge boards (3.26 ms), followed by Orin Nano (3.69 ms), then RK3588 (51.4 ms) and reCamera 2002 (53.0 ms). That ordering was previously wrong in two ways: Jetson was benchmarked on a heavier model, and contended NX measured below Nano.",
     "Jetson aggregate throughput is essentially flat from 1 to 6 concurrent contexts, so extra contexts split one GPU budget rather than adding capacity.",
-    "RKNN INT8 is a free win on both boards: 1.4-1.8x faster with no change in detections-per-frame on held-out real frames. Shipping it still requires re-running the frozen Subject-4 gate, because the temporal profile was frozen against FP16 pose output."
-  ]
+    "RKNN INT8 is a free win on both boards: 1.4-1.8x faster with no change in detections-per-frame on held-out real frames. Shipping it still requires re-running the frozen Subject-4 gate, because the temporal profile was frozen against FP16 pose output.",
+    "Hailo-8 is the one platform where fixing the model at YOLO11n does not yield a comparable row. The in-house 11n HEF measures 9.01 ms against 6.87 ms for the larger Model Zoo YOLOv8s, because it compiled to 3 contexts rather than 1. The shipped configuration stays on YOLOv8s, which is both faster and larger."
+  ],
+  "hailo_int8": {
+    "board": "Raspberry Pi 5 + Hailo-8",
+    "hailort": "4.21",
+    "yolo11n_pose": {
+      "deployable": false,
+      "source": "compiled in-house, Hailo Dataflow Compiler 3.31.0, 640x640 INT8, 64 GMDCSA-24 calibration frames, raw-head output",
+      "artifact": {
+        "bytes": 8033841,
+        "sha256": "c2fb0b533fbe6e1dd27736db623456fc05072b72a22a35ed8097796b90649910"
+      },
+      "contexts": 3,
+      "fps_hw_only": 92.1994,
+      "fps_streaming": 92.2012,
+      "latency_hw_ms": 9.01412,
+      "why_not": "Slower than the s-size Model Zoo build it would replace, and the runtime's post-processing is written against the Model Zoo output layout, not this raw head. No pipeline figure was measured."
+    },
+    "yolov8s_pose": {
+      "deployable": true,
+      "source": "Hailo Model Zoo v2.15 pre-compiled hailo8 HEF",
+      "contexts": 1,
+      "fps_hw_only": 393.904,
+      "fps_streaming": 393.899,
+      "latency_hw_ms": 6.87481
+    },
+    "finding": "The n-size build is 4.3x slower than the larger s-size build on the same accelerator: 9.01 ms vs 6.87 ms. hailortcli parse-hef attributes it to allocation - 11n compiled to 3 contexts, so weights are swapped once per inference, while the Model Zoo s build is single context with resident weights. The compiler had already flagged this: 100% control utilisation on cluster_2 at 16.6% total compute. The number therefore describes this HEF's allocation, not the ceiling for 11n on Hailo-8, and holding the model constant at n does not make Hailo comparable to the other boards the way it does for Jetson and RK."
+  }
 }

@@ -195,6 +195,22 @@ warehouse / face_rec 都不碰 GPU。同一效应让 Orin NX 上 INT8 单 contex
 3.69 ms ＞ RK3588 51.4 ms ＞ reCamera 2002 53.0 ms，Jetson 单帧约为 RK3588 的 1/15。
 Jetson 的总吞吐在 1–6 个 context 下几乎不变，说明并发共享同一份 GPU 预算而不是线性倍增。
 
+**Hailo-8 是唯一一块「固定成 11n 反而没法比」的板子。** Model Zoo v2.15 的 hailo8 目录没有
+任何 n 尺寸姿态模型，我们用 Dataflow Compiler 3.31.0 自行编译了一份 YOLO11n-Pose（640²、
+INT8、64 帧 GMDCSA 标定、raw head），在 `harvest-pi` 上停掉 `mcp_face_rec` 后实测：
+
+| HEF | context 数 | FPS (hw_only) | HW 延迟 |
+|---|---:|---:|---:|
+| YOLO11n-Pose（自编译） | 3 | 92.20 | 9.01 ms |
+| YOLOv8s-Pose（Model Zoo v2.15） | 1 | 393.90 | 6.87 ms |
+
+更小的模型慢 4.3 倍。`hailortcli parse-hef` 给出原因：11n 被切成 3 个 context，每帧换一次
+权重；s 尺寸是 single context，权重常驻。编译期已经有征兆——总算力占用只有 16.6%，
+cluster_2 的 control 利用率却已 100%。所以这个数字反映的是该 HEF 的资源分配，不是
+Hailo-8 跑 11n 的上限。部署配置维持 YOLOv8s：又快、模型又大。
+
+方法：`hailortcli benchmark --time-to-run 15`，只测加速器，与 trtexec / rknn 各行同口径。
+
 原始数据：[`reports/yolo11n-crossplatform-20260814.json`](reports/yolo11n-crossplatform-20260814.json)
 
 ## reCamera / reCamera Pro 状态

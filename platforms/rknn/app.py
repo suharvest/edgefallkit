@@ -61,7 +61,7 @@ class MqttPublisher:
                     if attempt: raise
 
 
-def build_payload(stream_id, frame_id, now, inference_ms, pipeline_ms,
+def build_payload(stream_id, frame_id, now, inference_ms, pipeline_ms, read_ms,
                   people, events, global_event_id, source_backend=None,
                   postprocess_backend=None):
     """Build the shared reCamera-compatible MQTT document."""
@@ -75,7 +75,7 @@ def build_payload(stream_id, frame_id, now, inference_ms, pipeline_ms,
                       "lying_posture":False,"upright_posture":False,"in_cooldown":False}
     return {"type":"fall_detection","version":"0.3.0","stream_id":stream_id,
             "frame_id":frame_id,"timestamp":int(now*1000),
-            "inference_time_ms":int(inference_ms+.5),"inference_ms":round(inference_ms,3),
+            "inference_time_ms":int(inference_ms+.5),"inference_ms":round(inference_ms,3),"read_ms":round(read_ms,3),
             "pipeline_ms":round(pipeline_ms,3),"coordinate_space":"letterbox_model_input_normalized",
             "person_detected":bool(visible_people),"person_count":len(visible_people),
             "fallen_count":len(fallen),"tracking":bool(people),"persons":people,
@@ -103,7 +103,11 @@ class StreamWorker(threading.Thread):
         detectors = {}; temporal = {}; frame_id = 0; global_event_id = 0
         try:
             while RUNNING:
+                _t_read = time.monotonic()
                 frame = source.read()
+                # read() is the one stage no published field covered, which left
+                # the decode backends impossible to compare in situ.
+                read_ms = (time.monotonic() - _t_read) * 1000.0
                 if frame is None:
                     time.sleep(float(self.stream.get("reconnect_delay_ms", 1000)) / 1000); continue
                 start = time.perf_counter(); now = time.time()
@@ -145,7 +149,7 @@ class StreamWorker(threading.Thread):
                                        "global_event_id": global_event_id})
                 frame_id += 1
                 payload = build_payload(self.stream["id"], frame_id, now, inference_ms,
-                                        (time.perf_counter()-start)*1000, people, events,
+                                        (time.perf_counter()-start)*1000, read_ms, people, events,
                                         global_event_id, source.active_backend,
                                         decoder.active_backend)
                 topic = self.cfg["mqtt"]["topic"].replace("{stream_id}", self.stream["id"])

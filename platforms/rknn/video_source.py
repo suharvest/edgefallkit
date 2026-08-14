@@ -86,13 +86,14 @@ class GStreamerMPP:
 
     def __init__(self, url: str, size: int = 640, transport: str = "tcp",
                  codec: str = "h264", latency_ms: int = 100,
-                 appsink_timeout_ms: int = 2000, **_):
+                 appsink_timeout_ms: int = 2000, appsink_queue: int = 3, **_):
         self.url = url
         self.size = size
         self.transport = transport
         self.codec = codec.lower()
         self.latency_ms = latency_ms
         self.timeout_ns = int(appsink_timeout_ms) * 1_000_000
+        self.appsink_queue = max(1, int(appsink_queue))
         self.pipeline = self.sink = self.bus = None
         self.Gst = None
         self.GstVideo = None
@@ -141,7 +142,12 @@ class GStreamerMPP:
         capsfilter.set_property("caps", Gst.Caps.from_string(
             "video/x-raw,format=RGB"))
         sink.set_property("sync", False)
-        sink.set_property("max-buffers", 1)
+        # Depth 1 means read() can only ever hand back the frame that arrives
+        # next: finish early and it waits, finish late and that frame was
+        # already dropped, so any jitter costs a whole frame period. A small
+        # queue absorbs that at the cost of at most a couple of frames of
+        # latency. drop=True still keeps the reader on recent frames.
+        sink.set_property("max-buffers", int(self.appsink_queue))
         sink.set_property("drop", True)
         sink.set_property("emit-signals", False)
         for element in (source, depay, parser, decoder, capsfilter, sink):

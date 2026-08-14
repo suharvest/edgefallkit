@@ -21,5 +21,8 @@ COPY --from=gstbad /usr/lib/aarch64-linux-gnu/libgstcodecparsers-1.0.so.0* \
      /usr/lib/aarch64-linux-gnu/
 COPY --from=gstbad /usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so \
      /usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstvideoparsersbad.so
-COPY platforms/rpi-hailo/build/fall-hailo /usr/local/bin/fall-hailo
+# --chmod is explicit: a build context assembled by copying the binary around
+# can arrive without the exec bit, and the container then fails at exec with
+# `permission denied` rather than anything pointing at the cause.
+COPY --chmod=0755 platforms/rpi-hailo/build/fall-hailo /usr/local/bin/fall-hailo
 ENTRYPOINT ["/usr/local/bin/fall-hailo"]

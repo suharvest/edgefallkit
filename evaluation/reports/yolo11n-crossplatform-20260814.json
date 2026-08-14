@@ -264,6 +264,68 @@
       "fps_streaming": 393.899,
       "latency_hw_ms": 6.87481
     },
-    "finding": "The n-size build is 4.3x slower than the larger s-size build on the same accelerator: 9.01 ms vs 6.87 ms. hailortcli parse-hef attributes it to allocation - 11n compiled to 3 contexts, so weights are swapped once per inference, while the Model Zoo s build is single context with resident weights. The compiler had already flagged this: 100% control utilisation on cluster_2 at 16.6% total compute. The number therefore describes this HEF's allocation, not the ceiling for 11n on Hailo-8, and holding the model constant at n does not make Hailo comparable to the other boards the way it does for Jetson and RK."
+    "finding": "The n-size build is 4.3x slower than the larger s-size build on the same accelerator: 9.01 ms vs 6.87 ms. hailortcli parse-hef attributes it to allocation - 11n compiled to 3 contexts, so weights are swapped once per inference, while the Model Zoo s build is single context with resident weights. The compiler had already flagged this: 100% control utilisation on cluster_2 at 16.6% total compute. The number therefore describes this HEF's allocation, not the ceiling for 11n on Hailo-8, and holding the model constant at n does not make Hailo comparable to the other boards the way it does for Jetson and RK.",
+    "root_cause": {
+      "diagnosis": "control-resource bound at compile time, not compute bound",
+      "compile_config": "bare compile: the only model script line was the input normalization. No performance_param, no resources_param — allocator ran at its default effort. The Model Zoo yolov8s_pose it is compared against ships with a tuned model script, so this is a tuned build against an untuned one.",
+      "utilization_per_context": {
+        "context_0": {
+          "control": 0.602,
+          "compute": 0.295,
+          "memory": 0.323
+        },
+        "context_1": {
+          "control": 0.602,
+          "compute": 0.369,
+          "memory": 0.394
+        },
+        "context_2": {
+          "control": 0.305,
+          "compute": 0.166,
+          "memory": 0.154
+        }
+      },
+      "saturated_clusters": "cluster_4 in context 0; cluster_2 and cluster_7 in context 1; cluster_2 in context 2 — all at 100% control while compute on the same context sits at 30-60%.",
+      "why_nano_hits_this": "Control budget is consumed per layer and per output stream, independent of how much arithmetic each layer does. A nano model has no fewer layers than an s model (YOLO11's C3k2/C2PSA branches are more fragmented), and the raw-head export adds 9 separate output streams.",
+      "inter_context_bandwidth_mbps_per_frame": 25.0854
+    },
+    "batch_sweep": {
+      "method": "hailortcli benchmark --time-to-run 10 --batch-size N, idle accelerator",
+      "note": "Latency is per batch, not per frame.",
+      "yolo11n_pose": {
+        "1": {
+          "fps_hw_only": 92.1994,
+          "latency_hw_ms": 9.01412
+        },
+        "4": {
+          "fps_hw_only": 160.279,
+          "latency_hw_ms": 19.4111
+        },
+        "8": {
+          "fps_hw_only": 183.396,
+          "latency_hw_ms": 33.2022
+        },
+        "16": {
+          "fps_hw_only": 198.256,
+          "latency_hw_ms": 60.5597
+        }
+      },
+      "yolov8s_pose": {
+        "1": {
+          "fps_hw_only": 393.904,
+          "latency_hw_ms": 6.87481
+        },
+        "8": {
+          "fps_hw_only": 393.76,
+          "latency_hw_ms": 7.29106
+        }
+      },
+      "finding": "Batching confirms the context-switch diagnosis and does not fix it. The n build recovers 2.15x (92.2 -> 198.3 FPS) as the per-batch switch cost is amortised, but even at batch 16 it reaches only half of what the s build does at batch 1. The s build is flat across batch sizes (393.9 -> 393.8), which is what a single-context network with resident weights looks like. The residual gap is the multi-context split itself, so it has to be fixed at compile time."
+    },
+    "remediation": [
+      "Recompile with performance_param(compiler_optimization_level=max) and a relaxed resources_param ceiling, so the allocator searches harder for a 1- or 2-context fit. Context 2 holds only 16.6% compute and looks mergeable. Costs compile time, no code change. Exact parameter names to be checked against the installed DFC.",
+      "Concatenate the 9 raw heads into 3 (one per scale) to cut output-stream and control pressure. Requires changing the ONNX end nodes and the host decoder.",
+      "Raise batch size: throughput only, and it caps out at half the s build."
+    ]
   }
 }

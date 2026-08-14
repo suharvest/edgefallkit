@@ -209,6 +209,34 @@ INT8、64 帧 GMDCSA 标定、raw head），在 `harvest-pi` 上停掉 `mcp_face
 cluster_2 的 control 利用率却已 100%。所以这个数字反映的是该 HEF 的资源分配，不是
 Hailo-8 跑 11n 的上限。部署配置维持 YOLOv8s：又快、模型又大。
 
+根因是**编译期 control 资源顶满，不是算力不够**。三个 context 的 control 利用率
+60.2% / 60.2% / 30.5%，对应 compute 只有 29.5% / 36.9% / 16.6%；cluster_4（ctx0）、
+cluster_2 与 cluster_7（ctx1）、cluster_2（ctx2）都已 100% control。control 预算按层和
+按输出流消耗，与算多少无关——nano 的层数并不比 s 少（YOLO11 的 C3k2/C2PSA 分支更碎），
+raw head 还多出 9 条输出流。每帧为此付 25.09 Mbps 的跨 context 搬运。
+
+而且那次是**裸编译**：model script 只有一行输入归一化，没有 `performance_param` 或
+`resources_param`，allocator 跑的是默认档；被对比的 Model Zoo `yolov8s_pose` 是带调优
+脚本编的。所以这是「调过的 s」对「没调的 n」。
+
+加 batch 能验证这个判断，但修不好它：
+
+| batch | n FPS | n 延迟（每批） | s FPS | s 延迟 |
+|---:|---:|---:|---:|---:|
+| 1 | 92.20 | 9.01 ms | 393.90 | 6.87 ms |
+| 4 | 160.28 | 19.41 ms | — | — |
+| 8 | 183.40 | 33.20 ms | 393.76 | 7.29 ms |
+| 16 | 198.26 | 60.56 ms | — | — |
+
+n 回收了 2.15 倍（92.2→198.3 FPS），但 batch=16 仍只有 s 在 batch=1 时的一半。s 则在各
+batch 下持平（393.9→393.8）——single context、权重常驻就是这个形状。剩下的差距就是多
+context 切分本身，只能在编译期解决。
+
+可选路径：① 加 `performance_param(compiler_optimization_level=max)` 与放宽的
+`resources_param` 重编，争取并掉只有 16.6% compute 的 ctx2；② 把 9 个 raw head 按尺度
+concat 成 3 个，降输出流与 control 压力（要改 ONNX end node 和 host 解码）；③ 加 batch，
+只提吞吐且封顶在 s 的一半。
+
 方法：`hailortcli benchmark --time-to-run 15`，只测加速器，与 trtexec / rknn 各行同口径。
 
 原始数据：[`reports/yolo11n-crossplatform-20260814.json`](reports/yolo11n-crossplatform-20260814.json)

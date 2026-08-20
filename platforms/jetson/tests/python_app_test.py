@@ -215,6 +215,19 @@ def test_runtime_section_is_validated():
             os.unlink(handle.name)
 
 
+def test_shard_client_id_is_unique_per_shard():
+    """A shared broker client id makes the broker evict the previous session."""
+    assert APP.shard_client_id("jetson-fall-detection", 0, 1) == "jetson-fall-detection"
+    ids = {APP.shard_client_id("jetson-fall-detection", index, 3) for index in range(3)}
+    assert ids == {
+        "jetson-fall-detection-0",
+        "jetson-fall-detection-1",
+        "jetson-fall-detection-2",
+    }
+    # A custom base is preserved, so an operator-set id stays recognisable.
+    assert APP.shard_client_id("floor-3", 2, 4) == "floor-3-2"
+
+
 def main():
     test_first_frame_lying_does_not_report()
     test_geometry_only_does_not_confirm()
@@ -227,6 +240,7 @@ def main():
     test_worker_count_shards_by_calibrated_capacity()
     test_shard_streams_is_balanced_and_lossless()
     test_runtime_section_is_validated()
+    test_shard_client_id_is_unique_per_shard()
     print("python_app_test passed")
 
 

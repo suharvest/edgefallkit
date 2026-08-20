@@ -820,6 +820,16 @@ def worker_count(config: dict[str, Any], stream_count: int) -> int:
     return max(1, min(count, stream_count))
 
 
+def shard_client_id(base: str, shard_index: int, shard_count: int) -> str:
+    """MQTT client id for one shard.
+
+    Every process needs its own broker session. Sharing one id makes the broker
+    evict the previous session, after which each publish fails with rc=4 and the
+    shard goes silent with no other symptom.
+    """
+    return base if shard_count <= 1 else f"{base}-{shard_index}"
+
+
 def shard_streams(streams: list[dict[str, Any]], shard_count: int) -> list[list[dict[str, Any]]]:
     """Split streams into `shard_count` groups whose sizes differ by at most 1."""
     shards: list[list[dict[str, Any]]] = [[] for _ in range(shard_count)]
@@ -842,12 +852,8 @@ def run_streams(config: dict[str, Any], streams: list[dict[str, Any]],
     signal.signal(signal.SIGTERM, stop_handler)
 
     mqtt_config = dict(config.get("mqtt", {}))
-    if shard_count > 1:
-        # Every process needs its own broker session. Sharing one client id
-        # makes the broker evict the previous session, after which each
-        # publish fails with rc=4 and the shard goes silent.
-        base = str(mqtt_config.get("client_id", "jetson-fall-detection"))
-        mqtt_config["client_id"] = f"{base}-{shard_index}"
+    mqtt_config["client_id"] = shard_client_id(
+        str(mqtt_config.get("client_id", "jetson-fall-detection")), shard_index, shard_count)
     try:
         publisher = MqttPublisher(mqtt_config)
     except (OSError, RuntimeError) as error:
@@ -862,15 +868,42 @@ def run_streams(config: dict[str, Any], streams: list[dict[str, Any]],
         return 2
     for worker in workers:
         worker.start()
+    exit_code = 0
     try:
         while RUNNING:
             time.sleep(0.5)
+            if not RUNNING:
+                break
+            if not any(worker.is_alive() for worker in workers):
+                # StreamWorker.run swallows its own fatal errors and returns, so
+                # a shard can lose every thread and still look healthy. The
+                # supervisor only checks process liveness, so without this the
+                # shard would sit there carrying no streams forever.
+                print(f"[shard {shard_index}] every stream worker stopped; exiting "
+                      "so the supervisor restarts this shard", file=sys.stderr)
+                exit_code = 1
+                break
     finally:
         RUNNING = False
+        # One deadline for all of them: the workers are daemon threads that
+        # return promptly once RUNNING clears, and joining each for a full
+        # timeout in turn would scale the shutdown with the stream count.
+        deadline = time.monotonic() + 10.0
         for worker in workers:
-            worker.join(timeout=10.0)
+            worker.join(timeout=max(0.0, deadline - time.monotonic()))
         publisher.close()
-    return 0
+    return exit_code
+
+
+def _shard_entry(config: dict[str, Any], streams: list[dict[str, Any]],
+                 shard_index: int, shard_count: int) -> None:
+    """Process entry point for one shard.
+
+    multiprocessing discards a target's return value, so a shard that gave up
+    would still report exitcode 0 and the supervisor log would claim a clean
+    exit. Raising SystemExit is what actually sets the child's exit code.
+    """
+    raise SystemExit(run_streams(config, streams, shard_index, shard_count))
 
 
 def supervise(config: dict[str, Any], shards: list[list[dict[str, Any]]]) -> int:
@@ -885,7 +918,7 @@ def supervise(config: dict[str, Any], shards: list[list[dict[str, Any]]]) -> int
 
     def start(index: int) -> None:
         process = context.Process(
-            target=run_streams, name=f"shard-{index}",
+            target=_shard_entry, name=f"shard-{index}",
             args=(config, shards[index], index, shard_count), daemon=False)
         process.start()
         processes[index] = process
@@ -922,8 +955,16 @@ def supervise(config: dict[str, Any], shards: list[list[dict[str, Any]]]) -> int
         for process in processes.values():
             if process.is_alive():
                 process.terminate()
-        for process in processes.values():
+        for index, process in processes.items():
             process.join(timeout=15.0)
+            if process.is_alive():
+                # terminate() is SIGTERM, which a shard blocked inside a CUDA or
+                # GStreamer call will not act on. Without SIGKILL the supervisor
+                # returns and leaves an orphan holding the GPU and the broker
+                # session, and the next start fails on the duplicate client id.
+                print(f"[shard {index}] did not exit on SIGTERM; killing", file=sys.stderr)
+                process.kill()
+                process.join(timeout=5.0)
     return 0
 
 

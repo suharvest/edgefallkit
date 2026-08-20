@@ -67,8 +67,10 @@ RTSP -> nvv4l2decoder (NVDEC) -> nvvidconv (Jetson VIC) -> appsink BGR host
 
 The capture buffer is copied row-wise into reusable pinned host staging, then
 to device staging with an asynchronous H2D transfer; this is **not zero-copy**.
-Both staging allocations grow geometrically and are reused, so normal frames do
-not call `cudaMalloc`/`cudaHostAlloc`.
+The two capture-side allocations grow geometrically and are reused, so normal
+frames do not call `cudaMalloc`/`cudaHostAlloc`. The pinned staging the result
+copy lands in is sized to the engine's output on first use and reused unchanged
+after that, since a fixed-shape engine never asks for more.
 Preprocessing and inference share one stream, and the kernel writes directly
 to TensorRT's FP32 or FP16 input allocation. Python still only receives the
 small detection/keypoint arrays through ctypes.
@@ -243,12 +245,13 @@ a `-<shard>` suffix. Sharing one client id makes the broker evict the previous
 session and every publish then fails with `rc=4`.
 
 `max_streams_per_worker` is a per-device calibration, not a constant. It is the
-number of streams one process sustains at the target frame rate. Measured on
-AGX Orin at 15 FPS with YOLO11s-Pose, one process holds 7 streams and caps near
-110 published FPS. Orin NX and Orin Nano have lower accelerator ceilings and
-have not been calibrated; on those boards the GPU is the binding constraint
-well before the GIL is, so the default of 7 resolves to a single process at
-their documented stream counts.
+number of streams one process sustains at the target frame rate. Measured at
+15 FPS with YOLO11s-Pose, one AGX Orin process holds 7 streams and caps near
+110 published FPS. The default of 7 has not been retuned for Orin NX Super or
+Orin Nano Super, and both exceed it before they saturate: their measured maxima
+of 9 and 8 streams run as two shards, which is also where each gains — Orin
+Nano Super goes from 104.0 aggregate on one process at 7 streams to 119.6 on
+two at 8, GR3D 77% to 91%.
 
 Sharding costs memory: every process deserializes its own engine. Measured
 container RSS on AGX Orin, YOLO11s-Pose: 8 streams in 2 shards 703 MiB,

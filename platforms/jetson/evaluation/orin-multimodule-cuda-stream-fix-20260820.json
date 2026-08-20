@@ -1,0 +1,84 @@
+{
+  "date": "2026-08-20",
+  "subject": "legacy-default-stream serialisation fix and process sharding",
+  "runtime": "TensorRT 10.3.0.30 FP16 SM87, CUDA 12.6",
+  "model": "YOLO11s-Pose",
+  "change": {
+    "trt_runner_cpp": [
+      "cudaStreamCreate -> cudaStreamCreateWithFlags(cudaStreamNonBlocking)",
+      "synchronous cudaMemcpy of the output replaced by cudaMemcpyAsync on the runner stream into pinned host staging, with the single cudaStreamSynchronize moved after it"
+    ],
+    "app_py": "runtime.workers/max_streams_per_worker process sharding, one mqtt client id per shard"
+  },
+  "method": {
+    "source_clip": "GMDCSA-24 subject-4/Fall/01",
+    "encoding": "640x640 H264 Constrained Baseline, 15 fps, 1.2 Mbps, 120 s loop",
+    "window_s": 60,
+    "metric": "published MQTT payloads per stream_id divided by window",
+    "pass_threshold_fps": 14.5,
+    "rtsp_host": {
+      "orin-nx": "external, same LAN",
+      "orin-nano": "external, same LAN",
+      "agx-orin": "local publishers with -c copy; host CPU 4.8 of 12 cores while GR3D was 89-99%"
+    }
+  },
+  "modules": {
+    "agx-orin-32g-j501": {
+      "l4t": "R36.4.4",
+      "power_mode": "MAXN",
+      "trtexec_core": {"qps": 322.919, "compute_ms_mean": 3.09429},
+      "max_streams_15fps": {"before": 6, "after_single_process": 7, "after_sharded": 16},
+      "aggregate_fps_ceiling": {"before": 98.5, "after_single_process": 105.7, "after_sharded": 246.4},
+      "gr3d_percent": {"before": 59.4, "after": 87.2},
+      "ramp": [
+        {"streams": 8, "shards": 1, "per_stream_fps": 13.21, "aggregate_fps": 105.7, "gr3d": 59},
+        {"streams": 8, "shards": 2, "per_stream_fps": 15.00, "aggregate_fps": 120.0, "gr3d": 62, "rss_mib": 703},
+        {"streams": 16, "shards": 3, "per_stream_fps": 14.99, "aggregate_fps": 239.8, "gr3d": 89, "rss_mib": 1161},
+        {"streams": 20, "shards": 3, "per_stream_fps": 12.32, "aggregate_fps": 246.4, "gr3d": 99, "rss_mib": 1292}
+      ]
+    },
+    "orin-nx-super-16g": {
+      "l4t": "R36.4.3",
+      "power_mode": "MAXN_SUPER",
+      "trtexec_core": {"qps": 173.807, "compute_ms_mean": 5.75119},
+      "max_streams_15fps": {"before": 8, "after": 9},
+      "aggregate_fps_ceiling": {"before": 116.5, "after": 134.4},
+      "gr3d_percent": {"before": 77.5, "after": 95.3},
+      "ramp": [
+        {"streams": 6, "shards": 1, "per_stream_fps": 14.68, "aggregate_fps": 88.1, "gr3d": 59},
+        {"streams": 8, "shards": 2, "per_stream_fps": 14.70, "aggregate_fps": 117.6, "gr3d": 84, "rss_mib": 664},
+        {"streams": 9, "shards": 2, "per_stream_fps": 14.93, "aggregate_fps": 134.4, "gr3d": 95},
+        {"streams": 10, "shards": 2, "per_stream_fps": 13.05, "aggregate_fps": 130.5, "gr3d": 99}
+      ]
+    },
+    "orin-nano-super-8g": {
+      "l4t": "R36.4.3",
+      "power_mode": "MAXN_SUPER",
+      "trtexec_core": {"qps": 155.286, "compute_ms_mean": 6.4372},
+      "max_streams_15fps": {"before": 6, "after": 8},
+      "aggregate_fps_ceiling": {"before": 98.2, "after": 120.3},
+      "gr3d_percent": {"before": 73.8, "after": 90.5},
+      "ramp": [
+        {"streams": 6, "shards": 1, "per_stream_fps": 14.79, "aggregate_fps": 88.8, "gr3d": 65, "rss_mib": 390},
+        {"streams": 7, "shards": 1, "per_stream_fps": 14.85, "aggregate_fps": 104.0, "gr3d": 77},
+        {"streams": 8, "shards": 2, "per_stream_fps": 14.95, "aggregate_fps": 119.6, "gr3d": 91},
+        {"streams": 9, "shards": 2, "per_stream_fps": 13.36, "aggregate_fps": 120.3, "gr3d": 98, "rss_mib": 711}
+      ]
+    }
+  },
+  "gil_attribution": {
+    "tool": "py-spy record --gil",
+    "device": "agx-orin",
+    "streams": 16,
+    "samples": 520,
+    "percent": {
+      "json_dumps": 22.5,
+      "paho_publish": 21.0,
+      "payload_and_as_json": 14.4,
+      "trtbridge_infer_ctypes_and_keypoints": 12.7,
+      "temporal_update_ckeypoint_rebuild": 5.8,
+      "other_tracking_and_read_loop": 23.7
+    }
+  },
+  "refuted_hypothesis": "A single shared paho client per process was suspected of serialising workers. One client per worker changed 8-stream aggregate from 105.7 to 109.5 and 12-stream from 101.1 to 100.8, within noise."
+}

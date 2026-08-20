@@ -3,10 +3,14 @@
 ## One-command model preparation and deployment
 
 The published model-free ARM64 runtime is
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1`
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc2`
 with RepoDigest
+`sha256:87cd652844d05eb17c7f16c9f8c95d23e5a9abda10692be10fa0ceb447750d9b`.
+It carries the non-blocking CUDA stream path and process sharding described
+under *Process sharding for stream density*, and was pulled back and verified
+on AGX Orin, Orin NX Super and Orin Nano Super. The previous
+`0.1.0-rc1` digest is
 `sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff`.
-It was pulled back and configuration-validated on both Orin Nano and Orin NX.
 The slim Compose uses this image by default and supports
 `FALL_DETECTION_IMAGE` for a pinned mirror or local build.
 
@@ -206,6 +210,98 @@ commercial license, or replace the pose model with a compatible-licensed raw
 TensorRT pose engine before shipping a closed commercial deployment. The
 runtime/parser itself is model-file agnostic within the documented output
 contract.
+
+### Process sharding for stream density
+
+One Python process stops scaling well before the accelerator does. Per-frame
+control-plane work — payload construction, `json.dumps`, and the paho publish
+path — all runs under one GIL. A `py-spy --gil` sample of a saturated
+AGX Orin process (520 samples, 16 streams) attributes that time as
+`json.dumps` 22.5%, paho publish 21.0%, `_payload`/`as_json` 14.4%,
+`TrtBridge.infer` (ctypes call plus keypoint marshalling) 12.7%,
+`temporal_update` 5.8%, remainder in tracking and the read loop.
+
+`app.py` therefore shards itself across OS processes:
+
+```json
+"runtime": {
+  "workers": "auto",
+  "max_streams_per_worker": 7
+}
+```
+
+`auto` starts `ceil(enabled_streams / max_streams_per_worker)` processes and
+distributes streams round-robin, so shard sizes differ by at most one. A
+supervisor process owns the children and restarts a shard that exits, with a
+5 s backoff. `workers` also accepts an explicit integer. Omitting the section,
+or setting `max_streams_per_worker` to 0, keeps the historical single-process
+behaviour, and a stream count at or below the calibration also resolves to one
+process with no extra supervisor overhead.
+
+Each shard opens its own broker session: the configured `mqtt.client_id` gains
+a `-<shard>` suffix. Sharing one client id makes the broker evict the previous
+session and every publish then fails with `rc=4`.
+
+`max_streams_per_worker` is a per-device calibration, not a constant. It is the
+number of streams one process sustains at the target frame rate. Measured on
+AGX Orin at 15 FPS with YOLO11s-Pose, one process holds 7 streams and caps near
+110 published FPS. Orin NX and Orin Nano have lower accelerator ceilings and
+have not been calibrated; on those boards the GPU is the binding constraint
+well before the GIL is, so the default of 7 resolves to a single process at
+their documented stream counts.
+
+Sharding costs memory: every process deserializes its own engine. Measured
+container RSS on AGX Orin, YOLO11s-Pose: 8 streams in 2 shards 703 MiB,
+16 streams in 3 shards 1161 MiB, 20 streams in 3 shards 1292 MiB.
+
+Measured on three Orin modules. Sources are 640x640 H264 Constrained Baseline
+15 FPS 1.2 Mbps loops of GMDCSA-24 `subject-4/Fall/01`, 60 s windows, MAXN.
+"Max at 15 FPS" is the largest stream count where every stream sustained at
+least 14.5 published FPS.
+
+Orin NX and Orin Nano pulled from an external RTSP host on the same LAN, so the
+device under test only decoded and inferred. The AGX Orin rows published
+locally with `-c copy`; its host CPU stayed at 4.8 of 12 cores while GR3D was
+already 89–99%, so that row is accelerator-bound either way.
+
+| Module | trtexec core | Max at 15 FPS, before | after | Aggregate ceiling before → after | GR3D before → after |
+|---|---:|---:|---:|---:|---:|
+| AGX Orin 32G (J501) | 322.9 qps / 3.09 ms | 6 | 7 single, **16 sharded** | 98 → 105 (240 sharded) | 59% → 89% |
+| Orin NX Super 16G | 173.8 qps / 5.75 ms | 8 | **9** | 116.5 → 134.4 | 77% → 95% |
+| Orin Nano Super 8G | 155.3 qps / 6.44 ms | 6 | **8** | 98.2 → 119.6 | 74% → 90% |
+
+The pattern is the same on all three: before the fix GR3D sat at 59–77% while
+aggregate throughput refused to rise, because the synchronous output copy on
+the legacy default stream serialised every runner. After it, all three reach
+89–95% and the accelerator becomes the limit.
+
+`trtexec core` is `--useCudaGraph --noDataTransfers` on an idle device. The
+Super modules measure far above the non-Super figures recorded earlier in this
+document. Orin NX Super leads Orin Nano Super by 12% in the core measurement
+and by 12% end to end: both carry 1024 CUDA cores, and this FP16 GPU path does
+not reproduce the ratio their TOPS ratings suggest.
+
+Per-device ramps:
+
+| Module | Streams | Shards | Per-stream FPS | Aggregate | GR3D | Container RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| AGX Orin | 8 | 1 | 13.21 | 105.7 | 59% | 502 MiB |
+| AGX Orin | 8 | 2 | 15.00 | 120.0 | 62% | 703 MiB |
+| AGX Orin | 16 | 3 | 14.99 | 239.8 | 89% | 1161 MiB |
+| AGX Orin | 20 | 3 | 12.32 | 246.4 | 99% | 1292 MiB |
+| Orin NX Super | 6 | 1 | 14.68 | 88.1 | 59% | — |
+| Orin NX Super | 8 | 2 | 14.70 | 117.6 | 84% | 664 MiB |
+| Orin NX Super | 9 | 2 | 14.93 | 134.4 | 95% | — |
+| Orin NX Super | 10 | 2 | 13.05 | 130.5 | 99% | — |
+| Orin Nano Super | 6 | 1 | 14.79 | 88.8 | 65% | 390 MiB |
+| Orin Nano Super | 7 | 1 | 14.85 | 104.0 | 77% | — |
+| Orin Nano Super | 8 | 2 | 14.95 | 119.6 | 91% | — |
+| Orin Nano Super | 9 | 2 | 13.36 | 120.3 | 98% | 711 MiB |
+
+Sharding earns its memory on every module, not only on AGX Orin: Orin Nano
+Super goes from 104.0 aggregate on one process to 119.6 on two, and its GR3D
+rises from 77% to 91% in the same step. The default calibration of 7 shards at
+8 streams and above, which is where each board needs it.
 
 ## Build the engine on Orin
 

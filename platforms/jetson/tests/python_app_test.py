@@ -165,6 +165,69 @@ def test_payload_matches_cross_platform_contract():
     validator.validate(fixture)
 
 
+def test_worker_count_shards_by_calibrated_capacity():
+    """`auto` divides streams by the per-device single-process capacity."""
+    def config_with(streams, **runtime):
+        return {"runtime": runtime, "streams": streams}
+
+    seven = {"workers": "auto", "max_streams_per_worker": 7}
+    assert APP.worker_count(config_with([], **seven), 7) == 1
+    assert APP.worker_count(config_with([], **seven), 8) == 2
+    assert APP.worker_count(config_with([], **seven), 14) == 2
+    assert APP.worker_count(config_with([], **seven), 15) == 3
+
+    # Absent or zeroed calibration keeps the historical single process.
+    assert APP.worker_count({}, 20) == 1
+    assert APP.worker_count(config_with([], workers="auto", max_streams_per_worker=0), 20) == 1
+
+    # An explicit count wins, but never exceeds the number of streams.
+    assert APP.worker_count(config_with([], workers=3), 16) == 3
+    assert APP.worker_count(config_with([], workers=99), 4) == 4
+
+
+def test_shard_streams_is_balanced_and_lossless():
+    streams = [{"id": f"cam-{index}"} for index in range(16)]
+    shards = APP.shard_streams(streams, 3)
+    sizes = sorted(len(shard) for shard in shards)
+    assert sizes == [5, 5, 6], sizes
+    flattened = [stream["id"] for shard in shards for stream in shard]
+    assert sorted(flattened) == sorted(stream["id"] for stream in streams)
+    assert len(set(flattened)) == len(streams)
+
+
+def test_runtime_section_is_validated():
+    import tempfile, os
+    base = json.loads((Path(__file__).parents[1] / "config" / "config.json").read_text())
+    for bad in ({"workers": 0}, {"workers": "many"}, {"workers": True},
+                {"max_streams_per_worker": -1}):
+        candidate = dict(base)
+        candidate["runtime"] = {"workers": "auto", "max_streams_per_worker": 7, **bad}
+        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump(candidate, handle)
+        handle.close()
+        try:
+            APP.load_config(handle.name)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"runtime{bad} should be rejected")
+        finally:
+            os.unlink(handle.name)
+
+
+def test_shard_client_id_is_unique_per_shard():
+    """A shared broker client id makes the broker evict the previous session."""
+    assert APP.shard_client_id("jetson-fall-detection", 0, 1) == "jetson-fall-detection"
+    ids = {APP.shard_client_id("jetson-fall-detection", index, 3) for index in range(3)}
+    assert ids == {
+        "jetson-fall-detection-0",
+        "jetson-fall-detection-1",
+        "jetson-fall-detection-2",
+    }
+    # A custom base is preserved, so an operator-set id stays recognisable.
+    assert APP.shard_client_id("floor-3", 2, 4) == "floor-3-2"
+
+
 def main():
     test_first_frame_lying_does_not_report()
     test_geometry_only_does_not_confirm()
@@ -174,6 +237,10 @@ def main():
     test_legacy_geometry_mode_is_explicit()
     test_recovery_returns_to_normal()
     test_payload_matches_cross_platform_contract()
+    test_worker_count_shards_by_calibrated_capacity()
+    test_shard_streams_is_balanced_and_lossless()
+    test_runtime_section_is_validated()
+    test_shard_client_id_is_unique_per_shard()
     print("python_app_test passed")
 
 

@@ -1,6 +1,6 @@
 services:
   fall-detection:
-    image: ${FALL_DETECTION_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1}
+    image: ${FALL_DETECTION_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc2}
     command: ["--config", "/app/config/config.json"]
     restart: unless-stopped
     runtime: nvidia

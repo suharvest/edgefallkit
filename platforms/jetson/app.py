@@ -2,7 +2,10 @@
 """Readable Python control plane for the Jetson fall detector.
 
 Python owns RTSP reconnection, stream orchestration, MQTT and the per-track
-fall state machine.  The hot data plane stays in ``libjetson_fall_trt.so``:
+fall state machine.  Above ``runtime.max_streams_per_worker`` streams the
+process shards itself: one OS process per group, because every stream's
+per-frame Python work (payload building, JSON, MQTT) contends for a single
+GIL and threads alone stop scaling well before the GPU saturates.  The hot data plane stays in ``libjetson_fall_trt.so``:
 OpenCV/GStreamer hands a BGR pointer to C++, where resize/letterbox, TensorRT
 enqueueV3 and YOLO parsing happen.  Only compact detections/keypoints cross
 the ctypes boundary; no image tensor or per-pixel Python loop is used.
@@ -14,6 +17,7 @@ import argparse
 import ctypes
 import json
 import math
+import multiprocessing
 import os
 import signal
 import sys
@@ -771,6 +775,15 @@ def load_config(path: str) -> dict[str, Any]:
     temporal_required = fall_config.setdefault("temporal_confirmation_required", True)
     if not isinstance(temporal_required, bool):
         raise ValueError("fall.temporal_confirmation_required must be boolean")
+    runtime_config = config.setdefault("runtime", {})
+    if not isinstance(runtime_config, dict):
+        raise ValueError("runtime must be an object")
+    workers = runtime_config.setdefault("workers", "auto")
+    if workers != "auto" and (isinstance(workers, bool) or not isinstance(workers, int) or workers < 1):
+        raise ValueError('runtime.workers must be "auto" or a positive integer')
+    per_worker = runtime_config.setdefault("max_streams_per_worker", 0)
+    if isinstance(per_worker, bool) or not isinstance(per_worker, int) or per_worker < 0:
+        raise ValueError("runtime.max_streams_per_worker must be a non-negative integer")
     streams = config.get("streams", [])
     if not isinstance(streams, list) or not streams:
         raise ValueError("streams must contain at least one RTSP source")
@@ -786,10 +799,176 @@ def load_config(path: str) -> dict[str, Any]:
     return config
 
 
-def main() -> int:
-    # main() both reads and assigns RUNNING, so without this declaration Python
-    # binds it as a local and the supervision loop raises UnboundLocalError.
+def worker_count(config: dict[str, Any], stream_count: int) -> int:
+    """How many OS processes should own the enabled streams.
+
+    ``runtime.workers`` accepts "auto" or a positive integer.  "auto" divides
+    the streams by ``runtime.max_streams_per_worker``, which is a per-device
+    calibration: it is the number of streams one Python process sustains at
+    the target frame rate before the GIL, not the accelerator, becomes the
+    limit.  A count of 1 keeps the historical single-process behaviour.
+    """
+    runtime = config.get("runtime", {})
+    requested = runtime.get("workers", "auto")
+    if requested == "auto":
+        per_worker = int(runtime.get("max_streams_per_worker", 0))
+        if per_worker <= 0:
+            return 1
+        count = math.ceil(stream_count / per_worker)
+    else:
+        count = int(requested)
+    return max(1, min(count, stream_count))
+
+
+def shard_client_id(base: str, shard_index: int, shard_count: int) -> str:
+    """MQTT client id for one shard.
+
+    Every process needs its own broker session. Sharing one id makes the broker
+    evict the previous session, after which each publish fails with rc=4 and the
+    shard goes silent with no other symptom.
+    """
+    return base if shard_count <= 1 else f"{base}-{shard_index}"
+
+
+def shard_streams(streams: list[dict[str, Any]], shard_count: int) -> list[list[dict[str, Any]]]:
+    """Split streams into `shard_count` groups whose sizes differ by at most 1."""
+    shards: list[list[dict[str, Any]]] = [[] for _ in range(shard_count)]
+    for index, stream in enumerate(streams):
+        shards[index % shard_count].append(stream)
+    return shards
+
+
+def run_streams(config: dict[str, Any], streams: list[dict[str, Any]],
+                shard_index: int, shard_count: int) -> int:
+    """Run one shard's streams in this process.  Also the single-shard path."""
     global RUNNING
+    RUNNING = True
+
+    def stop_handler(_signal: int, _frame: Any) -> None:
+        global RUNNING
+        RUNNING = False
+
+    signal.signal(signal.SIGINT, stop_handler)
+    signal.signal(signal.SIGTERM, stop_handler)
+
+    mqtt_config = dict(config.get("mqtt", {}))
+    mqtt_config["client_id"] = shard_client_id(
+        str(mqtt_config.get("client_id", "jetson-fall-detection")), shard_index, shard_count)
+    try:
+        publisher = MqttPublisher(mqtt_config)
+    except (OSError, RuntimeError) as error:
+        # Keep camera inference alive when an optional broker is temporarily
+        # offline; the error is explicit and the next process restart retries.
+        print(f"MQTT disabled after setup failure: {error}", file=sys.stderr)
+        publisher = MqttPublisher({"enabled": False})
+    workers = [StreamWorker(stream, config, publisher) for stream in streams]
+    if not workers:
+        print(f"[shard {shard_index}] no enabled RTSP streams", file=sys.stderr)
+        publisher.close()
+        return 2
+    for worker in workers:
+        worker.start()
+    exit_code = 0
+    try:
+        while RUNNING:
+            time.sleep(0.5)
+            if not RUNNING:
+                break
+            if not any(worker.is_alive() for worker in workers):
+                # StreamWorker.run swallows its own fatal errors and returns, so
+                # a shard can lose every thread and still look healthy. The
+                # supervisor only checks process liveness, so without this the
+                # shard would sit there carrying no streams forever.
+                print(f"[shard {shard_index}] every stream worker stopped; exiting "
+                      "so the supervisor restarts this shard", file=sys.stderr)
+                exit_code = 1
+                break
+    finally:
+        RUNNING = False
+        # One deadline for all of them: the workers are daemon threads that
+        # return promptly once RUNNING clears, and joining each for a full
+        # timeout in turn would scale the shutdown with the stream count.
+        deadline = time.monotonic() + 10.0
+        for worker in workers:
+            worker.join(timeout=max(0.0, deadline - time.monotonic()))
+        publisher.close()
+    return exit_code
+
+
+def _shard_entry(config: dict[str, Any], streams: list[dict[str, Any]],
+                 shard_index: int, shard_count: int) -> None:
+    """Process entry point for one shard.
+
+    multiprocessing discards a target's return value, so a shard that gave up
+    would still report exitcode 0 and the supervisor log would claim a clean
+    exit. Raising SystemExit is what actually sets the child's exit code.
+    """
+    raise SystemExit(run_streams(config, streams, shard_index, shard_count))
+
+
+def supervise(config: dict[str, Any], shards: list[list[dict[str, Any]]]) -> int:
+    """Start one process per shard and restart any that exits early."""
+    global RUNNING
+    # spawn, not fork: a forked child inherits the parent's CUDA and GStreamer
+    # state, which is not valid to use after fork.
+    context = multiprocessing.get_context("spawn")
+    shard_count = len(shards)
+    processes: dict[int, Any] = {}
+    next_restart: dict[int, float] = {}
+
+    def start(index: int) -> None:
+        process = context.Process(
+            target=_shard_entry, name=f"shard-{index}",
+            args=(config, shards[index], index, shard_count), daemon=False)
+        process.start()
+        processes[index] = process
+        print(f"[shard {index}] started pid={process.pid} "
+              f"streams={[stream['id'] for stream in shards[index]]}", file=sys.stderr)
+
+    def stop_handler(_signal: int, _frame: Any) -> None:
+        global RUNNING
+        RUNNING = False
+
+    signal.signal(signal.SIGINT, stop_handler)
+    signal.signal(signal.SIGTERM, stop_handler)
+    for index in range(shard_count):
+        start(index)
+    try:
+        while RUNNING:
+            time.sleep(0.5)
+            now = time.monotonic()
+            for index, process in list(processes.items()):
+                if process.is_alive():
+                    next_restart.pop(index, None)
+                    continue
+                # Back off so a shard that cannot start (bad engine, missing
+                # camera) does not spin the supervisor.
+                due = next_restart.get(index)
+                if due is None:
+                    print(f"[shard {index}] exited rc={process.exitcode}; restarting in 5s",
+                          file=sys.stderr)
+                    next_restart[index] = now + 5.0
+                elif now >= due:
+                    start(index)
+    finally:
+        RUNNING = False
+        for process in processes.values():
+            if process.is_alive():
+                process.terminate()
+        for index, process in processes.items():
+            process.join(timeout=15.0)
+            if process.is_alive():
+                # terminate() is SIGTERM, which a shard blocked inside a CUDA or
+                # GStreamer call will not act on. Without SIGKILL the supervisor
+                # returns and leaves an orphan holding the GPU and the broker
+                # session, and the next start fails on the duplicate client id.
+                print(f"[shard {index}] did not exit on SIGTERM; killing", file=sys.stderr)
+                process.kill()
+                process.join(timeout=5.0)
+    return 0
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Jetson TensorRT multi-stream fall detection")
     parser.add_argument("--config", default="/app/config/config.json")
     parser.add_argument("--validate", action="store_true", help="validate config and exit")
@@ -799,39 +978,21 @@ def main() -> int:
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"Configuration error: {error}", file=sys.stderr)
         return 2
+
+    enabled = [stream for stream in config["streams"] if stream.get("enabled", True)]
     if args.validate:
-        print(f"configuration valid: {len(config.get('streams', []))} stream(s)")
+        count = worker_count(config, len(enabled)) if enabled else 0
+        print(f"configuration valid: {len(config.get('streams', []))} stream(s), "
+              f"{len(enabled)} enabled, {count} worker process(es)")
         return 0
-
-    def stop_handler(_signal: int, _frame: Any) -> None:
-        global RUNNING
-        RUNNING = False
-
-    signal.signal(signal.SIGINT, stop_handler)
-    signal.signal(signal.SIGTERM, stop_handler)
-    try:
-        publisher = MqttPublisher(config.get("mqtt", {}))
-    except (OSError, RuntimeError) as error:
-        # Keep camera inference alive when an optional broker is temporarily
-        # offline; the error is explicit and the next process restart retries.
-        print(f"MQTT disabled after setup failure: {error}", file=sys.stderr)
-        publisher = MqttPublisher({"enabled": False})
-    workers = [StreamWorker(stream, config, publisher) for stream in config["streams"] if stream.get("enabled", True)]
-    if not workers:
+    if not enabled:
         print("No enabled RTSP streams", file=sys.stderr)
-        publisher.close()
         return 2
-    for worker in workers:
-        worker.start()
-    try:
-        while RUNNING:
-            time.sleep(0.5)
-    finally:
-        RUNNING = False
-        for worker in workers:
-            worker.join(timeout=10.0)
-        publisher.close()
-    return 0
+
+    count = worker_count(config, len(enabled))
+    if count == 1:
+        return run_streams(config, enabled, 0, 1)
+    return supervise(config, shard_streams(enabled, count))
 
 
 if __name__ == "__main__":

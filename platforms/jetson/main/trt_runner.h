@@ -48,6 +48,7 @@ public:
 private:
     bool allocateForInput(const nvinfer1::Dims& input_dims);
     bool ensureBgrStaging(std::size_t required_bytes);
+    bool ensureOutputStaging(std::size_t required_bytes);
     static std::size_t volume(const nvinfer1::Dims& dims);
     static std::size_t elementSize(nvinfer1::DataType type);
     bool checkCuda(cudaError_t status, const char* operation) const;
@@ -67,6 +68,8 @@ private:
     unsigned char* bgr_staging_device_ = nullptr;
     unsigned char* bgr_staging_host_ = nullptr;
     std::size_t bgr_staging_capacity_ = 0;
+    unsigned char* output_staging_host_ = nullptr;
+    std::size_t output_staging_capacity_ = 0;
     std::size_t input_bytes_ = 0;
     std::size_t output_bytes_ = 0;
     nvinfer1::DataType input_type_ = nvinfer1::DataType::kFLOAT;

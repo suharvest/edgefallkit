@@ -20,6 +20,7 @@ TrtRunner::~TrtRunner() {
     if (output_device_ != nullptr) cudaFree(output_device_);
     if (bgr_staging_device_ != nullptr) cudaFree(bgr_staging_device_);
     if (bgr_staging_host_ != nullptr) cudaFreeHost(bgr_staging_host_);
+    if (output_staging_host_ != nullptr) cudaFreeHost(output_staging_host_);
     if (stream_ != nullptr) cudaStreamDestroy(stream_);
 }
 
@@ -73,7 +74,11 @@ bool TrtRunner::load(const std::string& engine_path, TrtRunnerConfig config) {
     }
     context_.reset(engine_->createExecutionContext());
     if (!context_) return false;
-    if (!checkCuda(cudaStreamCreate(&stream_), "cudaStreamCreate")) return false;
+    // cudaStreamCreate produces a *blocking* stream that implicitly synchronises
+    // with the legacy default stream. One runner per RTSP stream then serialises
+    // against every other runner as soon as anything touches the default stream.
+    if (!checkCuda(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking),
+                   "cudaStreamCreateWithFlags")) return false;
 
     for (int i = 0; i < engine_->getNbIOTensors(); ++i) {
         const char* name = engine_->getIOTensorName(i);
@@ -161,6 +166,22 @@ bool TrtRunner::ensureBgrStaging(std::size_t required_bytes) {
     return true;
 }
 
+bool TrtRunner::ensureOutputStaging(std::size_t required_bytes) {
+    if (required_bytes == 0) return false;
+    if (required_bytes <= output_staging_capacity_) return true;
+    // Pinned host staging for the D2H result copy. Pageable destinations force
+    // the driver through its own staging path and cannot overlap.
+    unsigned char* replacement = nullptr;
+    if (!checkCuda(cudaHostAlloc(reinterpret_cast<void**>(&replacement), required_bytes,
+                                 cudaHostAllocPortable), "cudaHostAlloc(output staging)")) {
+        return false;
+    }
+    if (output_staging_host_ != nullptr) cudaFreeHost(output_staging_host_);
+    output_staging_host_ = replacement;
+    output_staging_capacity_ = required_bytes;
+    return true;
+}
+
 bool TrtRunner::infer(const cv::Mat& bgr, std::vector<float>& output,
                       std::vector<int64_t>& output_shape, LetterboxInfo& letterbox) {
     output.clear();
@@ -212,19 +233,26 @@ bool TrtRunner::infer(const cv::Mat& bgr, std::vector<float>& output,
         std::cerr << "TensorRT enqueueV3 failed\n";
         return false;
     }
-    if (!checkCuda(cudaStreamSynchronize(stream_), "cudaStreamSynchronize")) return false;
-
     const auto output_dims = context_->getTensorShape(output_name_.c_str());
     const std::size_t count = volume(output_dims);
     output.resize(count);
-    if (output_type_ == nvinfer1::DataType::kFLOAT) {
-        if (!checkCuda(cudaMemcpy(output.data(), output_device_, output_bytes_,
-                                  cudaMemcpyDeviceToHost), "cudaMemcpy(output)")) return false;
-    } else if (output_type_ == nvinfer1::DataType::kHALF) {
-        std::vector<__half> half_output(count);
-        if (!checkCuda(cudaMemcpy(half_output.data(), output_device_, output_bytes_,
-                                  cudaMemcpyDeviceToHost), "cudaMemcpy(output half)")) return false;
-        for (std::size_t i = 0; i < count; ++i) output[i] = __half2float(half_output[i]);
+    // A plain cudaMemcpy here runs on the legacy default stream and acts as a
+    // device-wide barrier, which cancels the per-runner streams. Stage into
+    // pinned host memory asynchronously on stream_ and synchronise only that
+    // stream; this is the single sync point for the whole frame.
+    if (output_type_ == nvinfer1::DataType::kFLOAT ||
+        output_type_ == nvinfer1::DataType::kHALF) {
+        if (!ensureOutputStaging(output_bytes_)) return false;
+        if (!checkCuda(cudaMemcpyAsync(output_staging_host_, output_device_, output_bytes_,
+                                       cudaMemcpyDeviceToHost, stream_),
+                       "cudaMemcpyAsync(output)")) return false;
+        if (!checkCuda(cudaStreamSynchronize(stream_), "cudaStreamSynchronize")) return false;
+        if (output_type_ == nvinfer1::DataType::kFLOAT) {
+            std::memcpy(output.data(), output_staging_host_, output_bytes_);
+        } else {
+            const __half* half_output = reinterpret_cast<const __half*>(output_staging_host_);
+            for (std::size_t i = 0; i < count; ++i) output[i] = __half2float(half_output[i]);
+        }
     } else {
         std::cerr << "Unsupported TensorRT output type (expected FP32/FP16)\n";
         return false;

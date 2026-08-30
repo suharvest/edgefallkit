@@ -63,12 +63,21 @@ be mislabeled with the larger probe latency.
 
 ## Benchmark
 
-Set `BENCHMARK_SECONDS=30` and use `test://ball` to isolate inference from RTSP:
+Set `BENCHMARK_SECONDS=30` and optionally `BENCHMARK_WARMUP_SECONDS=5`; use
+`test://ball` to isolate inference from RTSP. Warmup frames are processed and
+published, but are excluded from the reported `frames`, `fps`, and mean latency:
 
 ```bash
-STREAMS='one|test://ball' BENCHMARK_SECONDS=30 docker compose run --rm fall-detection
-STREAMS='one|test://ball;two|test://ball' BENCHMARK_SECONDS=30 docker compose run --rm fall-detection
+STREAMS='one|test://ball' BENCHMARK_WARMUP_SECONDS=5 BENCHMARK_SECONDS=30 docker compose run --rm fall-detection
+STREAMS='one|test://ball;two|test://ball' BENCHMARK_WARMUP_SECONDS=5 BENCHMARK_SECONDS=30 docker compose run --rm fall-detection
 ```
+
+The inference queue defaults to `INFERENCE_QUEUE_DEPTH=1` with downstream
+leaking and all other queue limits disabled. `queue=1` reduces stale-frame
+latency under load; it does not claim to increase throughput. For RTSP,
+`RTSP_DROP_ON_LATENCY` defaults to `false` (accepted values: `true`/`false` or
+`1`/`0`). Set it to `true` when prioritizing lower latency over retaining every
+frame; frames exceeding the configured source latency can then be discarded.
 
 Before benchmarking, ensure no other process owns `/dev/hailo0`. HailoRT 4.21
 direct-mode contexts are exclusive. In the authorized 2026-08-13 maintenance
@@ -173,3 +182,26 @@ tests and contract tests passed after the switch.
 
 Python control-plane feasibility and the exact HailoRT 4.21 ABI boundary are
 documented in [`PYTHON_CONTROL_PLANE.md`](PYTHON_CONTROL_PLANE.md).
+
+## 2026-08-30 多路 RTSP 路数边界
+
+Spark LAN MediaMTX 受控源为 H.264 Constrained Baseline 640x640@15 FPS、约
+1.2 Mbps、GOP30。warmup 10 秒、测量 60 秒，目标每路至少 14.5 FPS。`ENABLE_MQTT=OFF`
+（Pi 缺少 mosquitto development headers），所以以下是 RTSP→软解→Hailo→pose
+decode/tracker→payload construction 吞吐，不包含 broker publish，也不替换既有 MQTT
+contract 证据。
+
+| 配置 | 15 路 | 16 路 | 17 路 |
+|---|---:|---:|---:|
+| queue=2, drop=false | 15.0207–15.104 FPS；53.27–57.42 ms | 14.6152–14.6652 FPS；44.30–51.75 ms | 13.0236–13.057 FPS；fail |
+| queue=1, drop=false | 14.9320–14.9987 FPS；40.53–43.72 ms | 14.5215–14.5715 FPS；36.16–40.93 ms | 13.2264–13.2597 FPS；fail |
+| queue=1, drop=true | 14.6652–14.8485 FPS；37.03–40.78 ms | 14.3982–14.5815 FPS；fail | — |
+
+当前真实 RTSP 最大通过路数为 16（queue=1、drop=false）。queue=1 主要减少在途旧帧
+造成的陈旧帧延迟，不宣称提升吞吐。`RTSP_DROP_ON_LATENCY=true` 可用于低延迟丢帧策略，
+但本轮 16 路最低 FPS 为 14.3982，生产默认保持关闭。完整记录见
+[`../../evaluation/reports/rpi-hailo8-multistream-20260830.json`](../../evaluation/reports/rpi-hailo8-multistream-20260830.json)。
+
+最终源码在 Pi 上以 `BUILD_APP=ON`、`ENABLE_MQTT=OFF` 做 Release 构建并通过 4/4
+CTest。未显式设置 queue/drop 的默认配置复验 16 路为 14.5828–14.6328 FPS/路，
+CPU 239%、RSS 1,258,256 KiB、70.8°C。

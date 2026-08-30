@@ -1,0 +1,20 @@
+{
+  "method": {"source": "Spark LAN MediaMTX", "codec": "H.264 Constrained Baseline", "resolution": "640x640", "source_fps": 15, "bitrate_mbps_approx": 1.2, "gop": 30, "warmup_seconds": 10, "measure_seconds": 60, "enable_mqtt": false, "pipeline_scope": "RTSP -> software decode -> Hailo -> pose decode/tracker -> payload construction"},
+  "threshold": {"min_fps": 14.5, "decision": "pass when measured minimum FPS is at least threshold"},
+  "results": [
+    {"group":"A","queue_depth":2,"drop_on_latency":false,"streams":15,"fps_min":15.0207,"fps_max":15.104,"latency_ms_min":53.27,"latency_ms_max":57.42,"pass":true},
+    {"group":"A","queue_depth":2,"drop_on_latency":false,"streams":16,"fps_min":14.6152,"fps_max":14.6652,"latency_ms_min":44.30,"latency_ms_max":51.75,"pass":true},
+    {"group":"A","queue_depth":2,"drop_on_latency":false,"streams":17,"fps_min":13.0236,"fps_max":13.057,"latency_ms_min":44.7402,"latency_ms_max":51.3382,"pass":false},
+    {"group":"B","queue_depth":1,"drop_on_latency":false,"streams":15,"fps_min":14.932,"fps_max":14.9987,"latency_ms_min":40.53,"latency_ms_max":43.72,"pass":true},
+    {"group":"B","queue_depth":1,"drop_on_latency":false,"streams":16,"fps_min":14.5215,"fps_max":14.5715,"latency_ms_min":36.16,"latency_ms_max":40.93,"pass":true},
+    {"group":"B","queue_depth":1,"drop_on_latency":false,"streams":17,"fps_min":13.2264,"fps_max":13.2597,"latency_ms_min":39.4761,"latency_ms_max":46.0263,"pass":false},
+    {"group":"B","queue_depth":1,"drop_on_latency":false,"streams":18,"fps_min":11.51,"fps_max":11.56,"latency_ms_min":39.3743,"latency_ms_max":51.4715,"pass":false},
+    {"group":"C","queue_depth":1,"drop_on_latency":true,"streams":15,"fps_min":14.6652,"fps_max":14.8485,"latency_ms_min":37.03,"latency_ms_max":40.78,"pass":true},
+    {"group":"C","queue_depth":1,"drop_on_latency":true,"streams":16,"fps_min":14.3982,"fps_max":14.5815,"latency_ms_min":41.99,"latency_ms_max":45.85,"pass":false}
+  ],
+  "conclusion": {"max_passing_streams": 16, "configuration": "B: queue=1, drop_on_latency=false"},
+  "final_source_validation": {"build_app":true,"enable_mqtt":false,"ctest_passed":4,"ctest_total":4,"explicit_runtime_settings":["STREAMS","BENCHMARK_WARMUP_SECONDS=10","BENCHMARK_SECONDS=60"],"default_queue_and_drop":true,"streams":16,"fps_min":14.5828,"fps_max":14.6328,"aggregate_fps_average":14.6026,"mean_pipeline_ms_min":31.8965,"mean_pipeline_ms_max":35.7071,"cpu_percent":239,"rss_kib":1258256,"temperature_c":70.8,"get_throttled":"0x80000","remote_log":"harvest-pi:/tmp/edgefallkit-hailo-final/rtsp/default-streams-16-60s.log","remote_resources":"harvest-pi:/tmp/edgefallkit-hailo-final/rtsp/default-streams-16-60s.resources"},
+  "limitations": ["ENABLE_MQTT=OFF because the Pi lacks mosquitto development headers; broker publish is excluded.", "These are throughput results, not MQTT contract or fall-accuracy evidence.", "queue=1 is assessed as reducing stale in-flight frames; no throughput increase is claimed.", "Synthetic test://ball reached 15 FPS at 15 streams and failed at 16; it does not replace RTSP evidence.", "get_throttled=0x80000 means a soft temperature limit occurred since boot; the current-state bit 0x8 was not set in the snapshot."],
+  "artifacts": {"repository_report": "evaluation/reports/rpi-hailo8-multistream-20260830.json", "remote_device": "harvest-pi", "remote_paths": ["harvest-pi:/tmp/edgefallkit-hailo-opt/rtsp/"], "logs": "raw run logs and resource snapshots are retained under the remote run directory"},
+  "resources": {"reference_run":"B17","cpu_percent":246,"rss_kib":1366592,"temperature_c":78.5,"get_throttled":"0x80000","get_throttled_interpretation":"historical soft temperature limit occurred; current soft-temperature bit 0x8 not set"}
+}

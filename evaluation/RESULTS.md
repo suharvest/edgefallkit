@@ -1,6 +1,6 @@
 # 摔倒检测成果与对比台账
 
-更新日期：2026-08-13
+更新日期：2026-08-30
 
 本文件记录可横向比较的冻结结果。开发集成绩、最终测试成绩和外部测试
 严格分开；除非表格明确注明，否则不要把开发集数字作为产品准确率。
@@ -22,7 +22,7 @@
 | Jetson Orin Nano/NX | TensorRT 10.3 FP16 | 已有 | 已实现，fixture + 3,578 条真机 RTSP payload | 已完成 1/2/3/4/6 context + 单路 E2E | 已完成 | 已完成 |
 | RK3576 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 | RK3588 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成（含既有 NPU 负载） | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
-| Raspberry Pi + Hailo-8 | HailoRT/GStreamer | 已有 | 已实现，fixture + 2,602 条 RTSP 实时消息 | 已完成 synthetic、RTSP 单/双路与有人跌倒正向链路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
+| Raspberry Pi + Hailo-8 | HailoRT/GStreamer | 已有 | 已实现，fixture + 2,602 条 RTSP 实时消息 | 已完成 synthetic、RTSP 单/双路、16 路最大路数与有人跌倒正向链路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 
 ## 统一性能表
 
@@ -38,7 +38,7 @@
 | Orin NX | YOLO11m-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 context | 20.98/21.03 ms E2E infer；context aggregate 53.83/54.27/53.60/53.60/53.54 FPS | 15.02 FPS / 69.74 ms 输出间隔 P95 | 10.43% E2E | 126.7 MiB E2E | 28.48% mean | 13.85 W mean | 206 MB disk / 51.8 MB content | MAXN_SUPER；15 FPS 核心边界 3 路；本轮前无业务容器 |
 | RK3576 | YOLO11n-Pose RKNN FP16 | 640² | 1/2 context | 63.03 mean / 74.44 P95 | 15.15 FPS；65.73 / 77.98 ms | 63.1% snapshot | 174.4 MiB | Core0/1 36%/0% snapshot | N/A（无可靠口径） | 257,793,213 B | 4 人 bus 图；2ctx blank 29.15 FPS |
 | RK3588 | YOLO11n-Pose RKNN FP16 | 640² | 1/2/3 context | 51.41 mean / 58.92 P95（1ctx） | 19.25 / 38.13 / 51.40 aggregate FPS | N/A（争用） | 189.9/217.6/294.8 MiB | 100%@1GHz（含既有负载） | N/A（无可靠口径） | 257,793,213 B | 现有 voice/RKLLM 争用；无 failed submit |
-| Raspberry Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 640² | 1/2 | 6.87 ms / 393.3 FPS（HailoRT） | RTSP 单路 14.32 FPS，双路 14.33+14.30；有人流 14.72；probe P95 8.36/15.37–15.43/8.53 ms | 有人流 12.5% final | 有人流 130,784 KiB max | N/A（CLI未给利用率） | N/A（无可靠板级遥测） | 143,442,009 B | 2,602/2,602 MQTT contract 通过；native profile 已编译；人脸服务 healthy |
+| Raspberry Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 640² | 1/2；16 路 RTSP | 6.87 ms / 393.3 FPS（HailoRT） | 旧基线：单路 14.32 FPS、双路 14.33+14.30、有人流 14.72；本轮 16 路 14.5215–14.5715 FPS、probe 36.16–40.93 ms | 有人流 12.5% final；B17 246% | 有人流 130,784 KiB max；B17 1,366,592 KiB | N/A（CLI未给利用率） | N/A（无可靠板级遥测） | 143,442,009 B | 既有 2,602/2,602 MQTT contract 通过；本轮 ENABLE_MQTT=OFF，16 路为受控 RTSP 当前最大通过路数 |
 
 ## 统一准确性表
 
@@ -252,7 +252,7 @@ concat 成 3 个，降输出流与 control 压力（要改 ONNX end node 和 hos
 | RK3576 | 已实现原生 RKNN Lite 多路运行时 | RK3576 独立 profile 已冻结并部署 | S4 temporal gate 已完成；deployed state-machine accuracy 未单独评估 |
 | RK3588 | 已实现原生 RKNN Lite 多路运行时 | RK3588 独立 profile 已冻结并部署 | S4 temporal gate 已完成；deployed state-machine accuracy 未单独评估 |
 
-## Raspberry Pi 5 + Hailo-8 状态（2026-08-13）
+## Raspberry Pi 5 + Hailo-8 状态（2026-08-30）
 
 Fleet `harvest-pi` 已验证 Hailo-8、HailoRT/driver/firmware 4.21.0、Debian 13、
 Pi 5 16 KB page 与 `force_desc_page_size=4096`。官方 Hailo-8
@@ -712,3 +712,37 @@ RTSP 流和抖动影响。实时报警默认继续使用 batch1 多 context。
 [`orin-nano-yolo11s-multicontext-trt10.3.json`](../platforms/jetson/evaluation/orin-nano-yolo11s-multicontext-trt10.3.json)
 和
 [`orin-nx-yolo11m-multicontext-trt10.3.json`](../platforms/jetson/evaluation/orin-nx-yolo11m-multicontext-trt10.3.json)。
+
+## Raspberry Pi + Hailo-8 多路 RTSP 压测（2026-08-30）
+
+受控源为 Spark LAN MediaMTX：H.264 Constrained Baseline，640x640，15 FPS，约
+1.2 Mbps，GOP 30。每组 warmup 10 秒、测量 60 秒，目标为每路至少 14.5 FPS。
+本轮 `ENABLE_MQTT=OFF`（Pi 缺少 mosquitto development headers），吞吐口径为
+RTSP → 软件解码 → Hailo → pose decode/tracker → payload construction，不包含 broker
+publish，也不能替换既有 MQTT contract 证据。
+
+| 组别 | 路数 | FPS min/max | probe latency range | 判定 |
+|---|---:|---:|---:|---|
+| A queue=2/drop=false | 15 | 15.0207/15.1040 | 53.27–57.42 ms | pass |
+| A queue=2/drop=false | 16 | 14.6152/14.6652 | 44.30–51.75 ms | pass |
+| A queue=2/drop=false | 17 | 13.0236/13.0570 | 44.7402–51.3382 ms | fail |
+| B queue=1/drop=false | 15 | 14.9320/14.9987 | 40.53–43.72 ms | pass |
+| B queue=1/drop=false | 16 | 14.5215/14.5715 | 36.16–40.93 ms | pass |
+| B queue=1/drop=false | 17 | 13.2264/13.2597 | 39.4761–46.0263 ms | fail |
+| B queue=1/drop=false | 18 | 11.5100/11.5600 | 39.3743–51.4715 ms | fail |
+| C queue=1/drop=true | 15 | 14.6652/14.8485 | 37.03–40.78 ms | pass |
+| C queue=1/drop=true | 16 | 14.3982/14.5815 | 41.99–45.85 ms | fail |
+
+当前目标阈值下最大通过配置为 B 的 16 路。synthetic `test://ball` 在 15 路达到
+最高 15 FPS，16 路失败，不能代替真实 RTSP 结果。queue=1 的主要作用是减少在途旧帧
+和陈旧帧延迟，不宣称提升吞吐。C 的 drop-on-latency=true 在 16 路最低 FPS 为
+14.3982，低于目标，因此生产默认保持关闭。
+
+最终源码在 Pi 上以 `BUILD_APP=ON`、`ENABLE_MQTT=OFF` 做 Release 构建并通过 4/4
+CTest。只设置 `STREAMS`、10 秒 warmup 和 60 秒测量时间，保留 queue/drop 默认值的
+16 路复验为 14.5828–14.6328 FPS/路；CPU 239%、RSS 1,258,256 KiB、70.8°C。
+
+B17 资源快照为 CPU 246%、RSS 1,366,592 KiB、温度 78.5°C、`get_throttled=0x80000`。
+该值表示启动以来曾触发 soft temperature limit；当前状态位 `0x8` 未置位，因此这份快照
+不表示采样时仍处于 soft temperature limit。原始结构化记录见
+[`rpi-hailo8-multistream-20260830.json`](reports/rpi-hailo8-multistream-20260830.json)。

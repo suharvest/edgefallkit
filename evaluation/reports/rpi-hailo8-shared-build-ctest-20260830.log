@@ -1,0 +1,23 @@
+[ 20%] Built target runtime-config-test
+[ 25%] Built target batch-policy-test
+[ 50%] Built target hailo-logic-test
+[ 91%] Built target fall-hailo
+[100%] Built target runner-lifecycle-test
+Internal ctest changing into directory: /tmp/edgefallkit-batch-build
+Test project /tmp/edgefallkit-batch-build
+    Start 1: hailo-logic-test
+1/6 Test #1: hailo-logic-test .................   Passed    0.00 sec
+    Start 2: runtime-config-test
+2/6 Test #2: runtime-config-test ..............   Passed    0.00 sec
+    Start 3: batch-policy-test
+3/6 Test #3: batch-policy-test ................   Passed    0.03 sec
+    Start 4: runner-lifecycle-test
+4/6 Test #4: runner-lifecycle-test ............   Passed    0.00 sec
+    Start 5: payload-contract
+5/6 Test #5: payload-contract .................   Passed    0.04 sec
+    Start 6: deploy-script
+6/6 Test #6: deploy-script ....................   Passed    0.09 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =   0.17 sec

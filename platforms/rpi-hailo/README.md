@@ -1,8 +1,9 @@
 # Raspberry Pi 5 + Hailo-8 fall detection
 
 Native C++ runtime for the shared fall-detection algorithm. Frames are decoded
-by GStreamer, resized to RGB 640x640, and inferred by the native `hailonet`
-plugin. The process decodes the nine quantized YOLOv8s-Pose output tensors,
+by GStreamer and resized to RGB 640x640. Single-context models use the native
+`hailonet` plugin; multi-context models can use the shared direct-HailoRT batch
+backend. The process decodes the nine quantized YOLOv8-Pose output tensors,
 tracks every person independently, runs the same 48-frame temporal MLP and
 state machine as the other platforms, then publishes reCamera-compatible MQTT.
 There is no Torch, Ultralytics, ONNX Runtime, or Python in the deployed hot path.
@@ -53,13 +54,37 @@ visible tracks; `fallen_count` includes briefly retained missed tracks.
 per-track. Coordinates in `bbox` and `pose17` are normalized to the 640x640
 letterboxed inference space.
 
-`pipeline_ms`/`pipeline_time_ms` are measured from the buffer immediately before `hailonet`
-to its source pad, so it includes Hailo scheduling/output transfer but not RTSP
-decode, resize, C++ postprocess, tracking, or MQTT. Hailo's GStreamer element
-does not expose the accelerator-call duration at this probe, so
-`inference_time_ms` is `0` with `inference_time_metric=unavailable`; it must not
-be mislabeled with the larger probe latency.
+`pipeline_ms`/`pipeline_time_ms` depend on the selected backend. Legacy
+`hailonet` reports `latency_metric=pre_hailonet_to_hailonet_src`; its
+`pipeline_full_metric` is `pre_hailonet_to_post_tracker`. The shared backend
+reports `latency_metric=appsink_enqueue_to_hailort_completion`; its full metric
+is `appsink_enqueue_to_post_tracker`. Neither includes RTSP receive/decode or
+resize before the named origin, and neither `pipeline_ms` value includes C++
+postprocess, tracking, or MQTT. The runtime does not expose a separate
+accelerator-call duration, so `inference_time_ms` remains `0` with
+`inference_time_metric=unavailable`; it must not be mislabeled with either
+larger pipeline interval.
 `hailortcli benchmark` for pure NPU throughput.
+
+### Shared batch selection
+
+At startup `HAILO_BATCH_MODE=auto` selects the shared batch backend only when
+the HEF exposes exactly one network group marked multi-context. It selects
+batch 1 for 1--3 streams, batch 4 for 4 streams, and batch 8 for 5 or more.
+`off` keeps the legacy per-stream backend; `1`, `4`, and `8` are explicit
+shared-backend diagnostic overrides. `HAILO_BATCH_WAIT_MS` (0--1000, default
+20) bounds the time used to form a partial batch. The selected mode is printed
+as a machine-readable `HAILO_BATCH` line. Single-context YOLOv8s remains on
+the legacy path by default; multi-context YOLOv8m is the intended consumer.
+
+The shared backend collects the latest RGB frame from each stream and performs
+one direct HailoRT inference for the group. It configures the VDevice without
+the round-robin scheduler, explicitly activates the model, and pads partial
+submissions to the configured batch size. Page-aligned input/output slots,
+DMA mappings, and bindings are allocated once and reused. Shutdown stops frame
+collection, joins the inference worker after its current checked job, and then
+shuts down the configured model; this ordering avoids a HailoRT 4.21 lock
+conflict between vector `run_async` and `shutdown`.
 
 ## Benchmark
 
@@ -135,7 +160,7 @@ temporal-positive, and the payload covered `normal`, `suspected`, `fallen`, and
 to 5; every event had a valid current observation, 17-point pose, and temporal
 probability 1.0. Multiple events are expected from the looping positive clip and
 prove the functional path only; they are not Accuracy/Recall measurements.
-`pipeline_ms` remains the hailonet probe described above, not camera-to-MQTT
+For these legacy runs, `pipeline_ms` remains the hailonet probe described above, not camera-to-MQTT
 latency. Power is N/A because this Pi exposes no reliable board-power telemetry.
 
 The raw compressed MQTT, resource samples, application logs, summary, and
@@ -202,7 +227,7 @@ contract 证据。
 但本轮 16 路最低 FPS 为 14.3982，生产默认保持关闭。完整记录见
 [`../../evaluation/reports/rpi-hailo8-multistream-20260830.json`](../../evaluation/reports/rpi-hailo8-multistream-20260830.json)。
 
-最终源码在 Pi 上以 `BUILD_APP=ON`、`ENABLE_MQTT=OFF` 做 Release 构建并通过 4/4
+最终源码在 Pi 上以 `BUILD_APP=ON`、`ENABLE_MQTT=OFF` 做 Release 构建并通过 6/6
 CTest。未显式设置 queue/drop 的默认配置复验 16 路为 14.5828–14.6328 FPS/路，
 CPU 239%、RSS 1,258,256 KiB、70.8°C。
 
@@ -212,18 +237,40 @@ Official Hailo Model Zoo v2.19.0 Hailo-8 `yolov8m_pose.hef` is 31,608,992 bytes,
 SHA256 `fa0bfbf83dba494f4d75ec2fd0ef497ca9d402a65c324afc9865ffc327a53514`, with
 3 contexts and 9 raw outputs. On `harvest-pi` with HailoRT 4.21, bare HailoRT
 measured 30.87–30.98 FPS and 26.92–26.97 ms hardware latency. Synthetic app
-throughput was 30.0 FPS (one stream), 15.4862 / 15.4695 (two), and 10.3143 /
-10.3143 / 10.3309 (three). Controlled RTSP 640x640@15 measured 15.0098 /
+throughput on the former per-stream batch-1 path was 30.0 FPS (one stream),
+15.4862 / 15.4695 (two), and 10.3143 / 10.3143 / 10.3309 (three). Controlled
+RTSP 640x640@15 on that path measured 15.0098 /
 14.9932 FPS for two streams and 10.3278 / 10.3278 / 10.3111 for three; at the
-14.5 FPS target the maximum is two RTSP streams. `ENABLE_MQTT=OFF` excluded broker
-publishing because mosquitto development headers were unavailable.
+14.5 FPS target its maximum was two RTSP streams. `ENABLE_MQTT=OFF` excluded
+broker publishing because mosquitto development headers were unavailable.
 
 Bare-HEF batching increased total throughput to 69.38 FPS at batch 4
 (45.67 ms hardware latency per batch) and 86.91 FPS at batch 8 (71.08 ms per
-batch), or 2.25x and 2.81x the batch-1 throughput. The current application uses
-one independent batch-1 `hailonet` pipeline per stream, so these probes do not
-change the measured two-stream RTSP limit. Exploiting them requires a cross-stream
-frame collector/batcher and separate latency/fairness validation.
+batch), or 2.25x and 2.81x the batch-1 throughput. The shared auto-batch backend
+now exploits this capacity. With synthetic `test://ball` input it measured
+17.4122 FPS on each of four streams (69.6488 FPS total, 12 seconds, auto batch
+4). Five streams with auto batch 8 measured 17.4061, 17.4894, 17.4894, 17.4894,
+and 17.4061 FPS (87.2804 FPS total); max/min fairness was 1.0048.
+
+The controlled RTSP boundary used 10 seconds warmup and 60 seconds measurement.
+Five streams measured 14.9826, 14.9993, 14.9993, 15.0159, and 14.9993 FPS, so
+all passed the 14.5 FPS target. Six streams measured 14.2043, 14.2209,
+14.0544, 14.0044, 13.9545, and 14.0211 FPS, so all fell below the target. The verified
+YOLOv8m-Pose maximum is therefore **five 15 FPS RTSP streams**. A five-stream
+resource sample was 72.5% CPU, 234,368 KiB RSS, and 63.9°C. MQTT publishing was
+disabled for these runs, so they do not replace the existing payload-contract
+evidence.
+
+Raw application logs and their SHA256 values are recorded in
+[`../../evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json`](../../evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json),
+along with the Pi-native build and 6/6 CTest log.
+
+The scheduler choice accounted for the remaining gap after buffer reuse:
+round-robin scheduling measured 12.5743 FPS per stream at synthetic batch 4,
+while scheduler-disabled direct HailoRT measured 17.4002 FPS per stream. The
+official HEF, its digest, its three contexts, and its nine raw outputs were
+unchanged; the improvement came from shared batching, full-batch padding, and
+removing round-robin wait overhead rather than recompiling the model.
 
 The local m-model compile is not a result artifact: 64 calibration images reduced
 the optimization level to 1, and GPU noise analysis failed with a malformed device

@@ -37,7 +37,67 @@
       {"streams": 2, "fps": [15.0098, 14.9932], "mean_latency_ms": [40.7077, 43.8206], "pass": true},
       {"streams": 3, "fps": [10.3278, 10.3278, 10.3111], "mean_latency_ms": [90.737, 90.1096, 88.6653], "pass": false}
     ],
-    "max_rtsp_streams": 2
+    "shared_auto_batch": {
+      "policy": {
+        "eligibility": "exactly one multi-context network group",
+        "streams_1_to_3": 1,
+        "streams_4": 4,
+        "streams_5_or_more": 8,
+        "single_context_behavior": "legacy per-stream hailonet"
+      },
+      "implementation": {
+        "api": "direct HailoRT InferModel vector<Bindings>",
+        "scheduler": "HAILO_SCHEDULING_ALGORITHM_NONE",
+        "explicit_activation": true,
+        "full_batch_padding": true,
+        "preallocated_page_aligned_dma_slots": true,
+        "bindings_reused": true,
+        "shutdown_order": "stop batcher, join inference worker, configured model shutdown"
+      },
+      "scheduler_comparison_synthetic_batch4": {
+        "round_robin_fps_per_stream": 12.5743,
+        "round_robin_total_fps": 50.2972,
+        "scheduler_none_fps_per_stream": 17.4002,
+        "scheduler_none_total_fps": 69.6008,
+        "conclusion": "The remaining application gap after slot preallocation was round-robin scheduler wait overhead."
+      },
+      "synthetic": [
+        {
+          "streams": 4,
+          "batch_size": 4,
+          "measure_seconds": 12,
+          "fps": [17.4122, 17.4122, 17.4122, 17.4122],
+          "total_fps": 69.6488
+        },
+        {
+          "streams": 5,
+          "batch_size": 8,
+          "measure_seconds": 12,
+          "fps": [17.4061, 17.4894, 17.4894, 17.4894, 17.4061],
+          "total_fps": 87.2804,
+          "fairness_max_over_min": 1.0048
+        }
+      ],
+      "rtsp": [
+        {
+          "streams": 5,
+          "batch_size": 8,
+          "warmup_seconds": 10,
+          "measure_seconds": 60,
+          "fps": [14.9826, 14.9993, 14.9993, 15.0159, 14.9993],
+          "pass": true
+        },
+        {
+          "streams": 6,
+          "batch_size": 8,
+          "warmup_seconds": 10,
+          "measure_seconds": 60,
+          "fps": [14.2043, 14.2209, 14.0544, 14.0044, 13.9545, 14.0211],
+          "pass": false
+        }
+      ]
+    },
+    "max_rtsp_streams": 5
   },
   "resources": {
     "synthetic_2_cpu_percent": 35.1,
@@ -48,6 +108,9 @@
     "rtsp_2_rss_kib": 204560,
     "rtsp_3_cpu_percent": 35.2,
     "rtsp_3_rss_kib": 328032,
+    "shared_auto_rtsp_5_cpu_percent": 72.5,
+    "shared_auto_rtsp_5_rss_kib": 234368,
+    "shared_auto_rtsp_5_temperature_c": 63.9,
     "temperature_c_range": [59.8, 61.5],
     "get_throttled": "0x80000",
     "current_soft_temperature_bit": false
@@ -58,7 +121,8 @@
     "With 64 calibration images, the local m-model compile reduced optimization to level 1; GPU noise analysis then failed on a malformed TensorFlow device name.",
     "A diagnostic-skip retry completed QAT. Its allocator remained active in multi-context search and was deliberately stopped after about 3.5 hours when the official HEF was found; it is not a result artifact.",
     "After test exit, confirm fuser is empty for /dev/hailo0 before restoring a Hailo-owning container.",
-    "Batch 4/8 are bare-HEF throughput probes. The current per-stream GStreamer pipelines submit batch 1 and do not use cross-stream batching."
+    "Shared auto-batch RTSP runs used ENABLE_MQTT=OFF and therefore do not replace MQTT contract evidence.",
+    "Batch 8 pads partial groups to eight bindings. Only real input slots are included in per-stream application results."
   ],
   "artifact_logs": {
     "remote_workspace": "/mnt/d/hailo-pose-m-20260830",
@@ -70,11 +134,24 @@
     "pi_synthetic_2": "/tmp/edgefallkit-hailo-final/m-synthetic-2.log",
     "pi_synthetic_3": "/tmp/edgefallkit-hailo-final/m-synthetic-3.log",
     "pi_rtsp_2": "/tmp/edgefallkit-hailo-final/m-rtsp-2.log",
-    "pi_rtsp_3": "/tmp/edgefallkit-hailo-final/m-rtsp-3.log"
+    "pi_rtsp_3": "/tmp/edgefallkit-hailo-final/m-rtsp-3.log",
+    "shared_synthetic_batch4": "evaluation/reports/rpi-hailo8-m-shared-synth4-20260830.log",
+    "shared_synthetic_batch8": "evaluation/reports/rpi-hailo8-m-shared-synth5-20260830.log",
+    "shared_rtsp_5": "evaluation/reports/rpi-hailo8-m-shared-rtsp5-20260830.log",
+    "shared_rtsp_6": "evaluation/reports/rpi-hailo8-m-shared-rtsp6-20260830.log",
+    "pi_build_ctest": "evaluation/reports/rpi-hailo8-shared-build-ctest-20260830.log"
+  },
+  "artifact_sha256": {
+    "shared_synthetic_batch4": "e5faa7759db3b2acf0c4f5a1b75b196fb6f6911579ee01d4d625d71ede424f2e",
+    "shared_synthetic_batch8": "676dab648a52ff5f2259d4a3475c133aeae0612121d521f4bdb2271174d34852",
+    "shared_rtsp_5": "2afa5a46d90af173c08902d3a3ce667083aee4979629fd864988ebb282204524",
+    "shared_rtsp_6": "511bdf8e1205330de865d8b5661c3b07b84a64bfcdff4b187e19b3e5fc7b8a60",
+    "pi_build_ctest": "61cb47bac9c911317fd5a1a75712ec11d216b376fbac5e891426df9342a6c8e2"
   },
   "final_state": {
     "mcp_face_rec": "running healthy",
     "seeed_local_voice": "exited",
-    "spark_rtsp_publisher": "stopped"
+    "spark_rtsp_publisher": "stopped",
+    "fall_hailo_processes": 0
   }
 }

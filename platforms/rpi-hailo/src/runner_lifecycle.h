@@ -1,0 +1,28 @@
+#pragma once
+
+#include <atomic>
+#include <utility>
+
+namespace rpi_hailo {
+
+class RunnerLifecycle {
+ public:
+  template <typename PostQuit>
+  void fail(PostQuit &&post_quit) {
+    if (!failed_.exchange(true, std::memory_order_acq_rel))
+      std::forward<PostQuit>(post_quit)();
+  }
+
+  bool shouldRunLoop() const {
+    return !failed_.load(std::memory_order_acquire);
+  }
+
+  int exitCode(int current) const {
+    return current == 0 && !shouldRunLoop() ? 4 : current;
+  }
+
+ private:
+  std::atomic<bool> failed_{false};
+};
+
+}  // namespace rpi_hailo

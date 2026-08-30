@@ -9,7 +9,7 @@ option(ENABLE_MQTT "Build libmosquitto publisher" ON)
 set(JETSON_COMMON ${CMAKE_CURRENT_SOURCE_DIR}/../jetson/main)
 if(BUILD_APP)
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-video-1.0)
+  pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0)
   find_package(HailoRT REQUIRED)
   find_library(HAILO_GST_LIBRARY gsthailo PATHS /usr/lib/aarch64-linux-gnu/gstreamer-1.0 REQUIRED)
   if(ENABLE_MQTT)
@@ -17,7 +17,10 @@ if(BUILD_APP)
   endif()
   add_executable(fall-hailo
     src/main.cpp
+    src/batched_hailo_runner.cpp
     src/hailo_pose_decoder.cpp
+    src/batch_policy.cpp
+    src/frame_batcher.cpp
     src/tracker_hailo.cpp
     ${JETSON_COMMON}/pose.cpp
     ${JETSON_COMMON}/fall_detector.cpp
@@ -43,6 +46,12 @@ add_test(NAME hailo-logic-test COMMAND hailo-logic-test)
 add_executable(runtime-config-test tests/runtime_config_test.cpp)
 target_include_directories(runtime-config-test PRIVATE src)
 add_test(NAME runtime-config-test COMMAND runtime-config-test)
+add_executable(batch-policy-test tests/batch_policy_test.cpp src/batch_policy.cpp src/frame_batcher.cpp)
+target_include_directories(batch-policy-test PRIVATE src)
+add_test(NAME batch-policy-test COMMAND batch-policy-test)
+add_executable(runner-lifecycle-test tests/runner_lifecycle_test.cpp)
+target_include_directories(runner-lifecycle-test PRIVATE src)
+add_test(NAME runner-lifecycle-test COMMAND runner-lifecycle-test)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME payload-contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/payload_contract_test.py)
 add_test(NAME deploy-script COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/deploy_test.py)

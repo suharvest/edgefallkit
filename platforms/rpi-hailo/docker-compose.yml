@@ -23,6 +23,8 @@ services:
     devices:
       - /dev/hailo0:/dev/hailo0
     environment:
+      HAILO_BATCH_MODE: ${HAILO_BATCH_MODE:-auto}
+      HAILO_BATCH_WAIT_MS: ${HAILO_BATCH_WAIT_MS:-20}
       HEF_PATH: /models/yolov8s_pose.hef
       # Semicolon-separated id|URL entries; add entries for multi-stream use.
       STREAMS: "${STREAMS:-cam-01|rtsp://192.168.1.10:554/stream1}"

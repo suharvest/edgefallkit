@@ -1,0 +1,80 @@
+{
+  "date": "2026-08-30",
+  "artifact": {
+    "url": "https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.19.0/hailo8/yolov8m_pose.hef",
+    "bytes": 31608992,
+    "sha256": "fa0bfbf83dba494f4d75ec2fd0ef497ca9d402a65c324afc9865ffc327a53514",
+    "arch": "HAILO8",
+    "contexts": 3,
+    "raw_outputs": 9
+  },
+  "method": {
+    "device": "harvest-pi Raspberry Pi 5 + Hailo-8",
+    "runtime": "HailoRT 4.21",
+    "source": "H264 Constrained Baseline 640x640@15fps, about 1.2Mbps, GOP30, Spark LAN MediaMTX",
+    "warmup_seconds": 10,
+    "measure_seconds": 60,
+    "threshold_fps": 14.5,
+    "enable_mqtt": false,
+    "scope": "RTSP decode -> Hailo -> decode/tracker -> payload construction; broker publish excluded"
+  },
+  "results": {
+    "hailort_bare": {
+      "streams": 1,
+      "fps_range": [30.87, 30.98],
+      "hw_latency_ms_range": [26.92, 26.97],
+      "batches": [
+        {"batch_size": 4, "hw_only_fps": 69.3751, "streaming_fps": 69.2738, "hw_latency_ms_per_batch": 45.6667, "speedup_over_batch_1": 2.25},
+        {"batch_size": 8, "hw_only_fps": 86.9124, "streaming_fps": 86.9126, "hw_latency_ms_per_batch": 71.0768, "speedup_over_batch_1": 2.81}
+      ]
+    },
+    "synthetic": [
+      {"streams": 1, "fps": [30.0], "mean_latency_ms": [26.7402], "pass": true},
+      {"streams": 2, "fps": [15.4862, 15.4695], "mean_latency_ms": [60.9354, 60.3006], "pass": true},
+      {"streams": 3, "fps": [10.3143, 10.3143, 10.3309], "mean_latency_ms": [87.557, 89.0384, 89.2127], "pass": false}
+    ],
+    "rtsp": [
+      {"streams": 2, "fps": [15.0098, 14.9932], "mean_latency_ms": [40.7077, 43.8206], "pass": true},
+      {"streams": 3, "fps": [10.3278, 10.3278, 10.3111], "mean_latency_ms": [90.737, 90.1096, 88.6653], "pass": false}
+    ],
+    "max_rtsp_streams": 2
+  },
+  "resources": {
+    "synthetic_2_cpu_percent": 35.1,
+    "synthetic_2_rss_kib": 191520,
+    "synthetic_3_cpu_percent": 45.9,
+    "synthetic_3_rss_kib": 263920,
+    "rtsp_2_cpu_percent": 25.8,
+    "rtsp_2_rss_kib": 204560,
+    "rtsp_3_cpu_percent": 35.2,
+    "rtsp_3_rss_kib": 328032,
+    "temperature_c_range": [59.8, 61.5],
+    "get_throttled": "0x80000",
+    "current_soft_temperature_bit": false
+  },
+  "limitations": [
+    "ENABLE_MQTT=OFF because mosquitto development headers were unavailable; this does not replace MQTT contract evidence.",
+    "Official DFC2.19 PCIe Gen3x4 reference is 68.6 FPS batch1 and 145 FPS batch8, not Pi end-to-end performance.",
+    "With 64 calibration images, the local m-model compile reduced optimization to level 1; GPU noise analysis then failed on a malformed TensorFlow device name.",
+    "A diagnostic-skip retry completed QAT. Its allocator remained active in multi-context search and was deliberately stopped after about 3.5 hours when the official HEF was found; it is not a result artifact.",
+    "After test exit, confirm fuser is empty for /dev/hailo0 before restoring a Hailo-owning container.",
+    "Batch 4/8 are bare-HEF throughput probes. The current per-stream GStreamer pipelines submit batch 1 and do not use cross-stream batching."
+  ],
+  "artifact_logs": {
+    "remote_workspace": "/mnt/d/hailo-pose-m-20260830",
+    "compile_log": "/mnt/d/hailo-pose-m-20260830/logs/compile-gpu-skip-noise.log",
+    "pi_bare_benchmark": "/tmp/edgefallkit-hailo-final/m-benchmark.log",
+    "pi_bare_benchmark_batch4": "/tmp/edgefallkit-hailo-final/m-benchmark-b4.log",
+    "pi_bare_benchmark_batch8": "/tmp/edgefallkit-hailo-final/m-benchmark-b8.log",
+    "pi_synthetic_1": "/tmp/edgefallkit-hailo-final/m-synthetic-1.log",
+    "pi_synthetic_2": "/tmp/edgefallkit-hailo-final/m-synthetic-2.log",
+    "pi_synthetic_3": "/tmp/edgefallkit-hailo-final/m-synthetic-3.log",
+    "pi_rtsp_2": "/tmp/edgefallkit-hailo-final/m-rtsp-2.log",
+    "pi_rtsp_3": "/tmp/edgefallkit-hailo-final/m-rtsp-3.log"
+  },
+  "final_state": {
+    "mcp_face_rec": "running healthy",
+    "seeed_local_voice": "exited",
+    "spark_rtsp_publisher": "stopped"
+  }
+}

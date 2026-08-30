@@ -746,3 +746,40 @@ B17 资源快照为 CPU 246%、RSS 1,366,592 KiB、温度 78.5°C、`get_throttl
 该值表示启动以来曾触发 soft temperature limit；当前状态位 `0x8` 未置位，因此这份快照
 不表示采样时仍处于 soft temperature limit。原始结构化记录见
 [`rpi-hailo8-multistream-20260830.json`](reports/rpi-hailo8-multistream-20260830.json)。
+
+## 2026-08-30 官方 YOLOv8m-Pose HEF
+
+本轮采用 Hailo Model Zoo v2.19.0 官方 Hailo-8 HEF：
+[`yolov8m_pose.hef`](https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.19.0/hailo8/yolov8m_pose.hef)。
+文件大小 31,608,992 B，SHA256 为
+`fa0bfbf83dba494f4d75ec2fd0ef497ca9d402a65c324afc9865ffc327a53514`，解析为
+HAILO8、3 contexts、9 raw outputs。DFC2.19 PCIe Gen3x4 官方表为 batch1 68.6
+FPS、batch8 145 FPS，不是 Pi 端到端数字。
+
+| 测试 | 路数 | FPS | 延迟 | 结果 |
+|---|---:|---|---|---|
+| HailoRT 裸 benchmark | 1 | 30.87–30.98 | HW 26.92–26.97 ms | 稳定采样 |
+| HailoRT 裸 benchmark，batch 4 | 1 network group | 69.38 total | HW 45.67 ms/batch | throughput probe |
+| HailoRT 裸 benchmark，batch 8 | 1 network group | 86.91 total | HW 71.08 ms/batch | throughput probe |
+| synthetic app | 1 | 30.0 | 26.7402 ms | pass |
+| synthetic app | 2 | 15.4862 / 15.4695 | 60.9354 / 60.3006 ms | pass |
+| synthetic app | 3 | 10.3143 / 10.3143 / 10.3309 | 87.557 / 89.0384 / 89.2127 ms | fail |
+| RTSP 640²@15 | 2 | 15.0098 / 14.9932 | 40.7077 / 43.8206 ms | pass |
+| RTSP 640²@15 | 3 | 10.3278 / 10.3278 / 10.3111 | 90.737 / 90.1096 / 88.6653 ms | fail |
+
+目标为每路至少 14.5 FPS，官方 YOLOv8m-Pose 的 Pi RTSP 最大通过路数为
+**2 路**。测试使用 `ENABLE_MQTT=OFF`（Pi 缺 mosquitto development headers），
+口径为 RTSP→软解→Hailo→decode/tracker→payload construction，不含 broker publish，
+不能替换旧 MQTT contract 证据。三路 synthetic CPU/RSS 为 45.9% / 263920 KiB，
+三路 RTSP 为 35.2% / 328032 KiB，温度 59.8–61.5°C。
+
+裸 HEF 的 batch 4/8 相比 batch 1 分别为 2.25/2.81 倍吞吐，说明 batch 能摊薄
+multi-context 切换成本；它没有把三个 context 变成并行执行。当前每个 GStreamer
+pipeline 独立提交 batch 1，因此该数据不提高上表已实测的 2 路 RTSP 上限。若要利用
+batch，需要增加跨流 frame collector/batcher，并重新测试组批等待、尾延迟和公平性。
+
+自编译 m 模型不计入结果：64 张标定图使优化等级降为 1，GPU noise-analysis
+收到损坏的 TensorFlow device name；跳过该诊断后 QAT 完成。allocator 仍在执行
+multi-context 搜索时发现官方 HEF，搜索约 3.5 小时后被主动停止，并非 allocator
+报错或超时。完整结构化证据见
+[`reports/rpi-hailo8-yolov8m-pose-20260830.json`](reports/rpi-hailo8-yolov8m-pose-20260830.json)。

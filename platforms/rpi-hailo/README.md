@@ -205,3 +205,29 @@ contract 证据。
 最终源码在 Pi 上以 `BUILD_APP=ON`、`ENABLE_MQTT=OFF` 做 Release 构建并通过 4/4
 CTest。未显式设置 queue/drop 的默认配置复验 16 路为 14.5828–14.6328 FPS/路，
 CPU 239%、RSS 1,258,256 KiB、70.8°C。
+
+### Official YOLOv8m-Pose benchmark (2026-08-30)
+
+Official Hailo Model Zoo v2.19.0 Hailo-8 `yolov8m_pose.hef` is 31,608,992 bytes,
+SHA256 `fa0bfbf83dba494f4d75ec2fd0ef497ca9d402a65c324afc9865ffc327a53514`, with
+3 contexts and 9 raw outputs. On `harvest-pi` with HailoRT 4.21, bare HailoRT
+measured 30.87–30.98 FPS and 26.92–26.97 ms hardware latency. Synthetic app
+throughput was 30.0 FPS (one stream), 15.4862 / 15.4695 (two), and 10.3143 /
+10.3143 / 10.3309 (three). Controlled RTSP 640x640@15 measured 15.0098 /
+14.9932 FPS for two streams and 10.3278 / 10.3278 / 10.3111 for three; at the
+14.5 FPS target the maximum is two RTSP streams. `ENABLE_MQTT=OFF` excluded broker
+publishing because mosquitto development headers were unavailable.
+
+Bare-HEF batching increased total throughput to 69.38 FPS at batch 4
+(45.67 ms hardware latency per batch) and 86.91 FPS at batch 8 (71.08 ms per
+batch), or 2.25x and 2.81x the batch-1 throughput. The current application uses
+one independent batch-1 `hailonet` pipeline per stream, so these probes do not
+change the measured two-stream RTSP limit. Exploiting them requires a cross-stream
+frame collector/batcher and separate latency/fairness validation.
+
+The local m-model compile is not a result artifact: 64 calibration images reduced
+the optimization level to 1, and GPU noise analysis failed with a malformed device
+name. A diagnostic-skip retry completed QAT; its active multi-context allocator was
+stopped after about 3.5 hours when the official HEF was found. It did not report a
+timeout or allocation failure. Structured evidence is in
+[`../../evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json`](../../evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json).

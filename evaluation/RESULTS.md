@@ -19,10 +19,10 @@
 |---|---|---|---|---|---|---|
 | reCamera SG2002 | CVI Runtime INT8 | N/A（固件/appMgr） | 已实现，待 schema fixture | 已有单路现场基线 | 74.1% Accuracy / 83.3% Recall | 58.8% Recall |
 | reCamera Pro | RKNN | N/A（Pro app packaging） | 已实现；WS 真机字段已采集，MQTT schema fixture 待真机 broker | 已完成单路 live camera/NPU/WebSocket | production fallback 81.5% Accuracy / 91.7% Recall；native experiment 70.4% / 75.0% | N/A（未执行外部集评测） |
-| Jetson Orin Nano/NX | TensorRT 10.3 FP16 | 已有 | 已实现，fixture + 3,578 条真机 RTSP payload | 已完成 1/2/3/4/6 context + 单路 E2E | 已完成 | 已完成 |
+| Jetson Orin Nano/NX | TensorRT 10.3 FP16 | 已有 | 已实现，fixture + 真机多路 RTSP/MQTT payload | 已完成早期 1/2/3/4/6 context、单路 E2E，以及当前 Nano 8 路/NX 9 路 RTSP 边界 | 已完成 | 已完成 |
 | RK3576 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 | RK3588 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成（含既有 NPU 负载） | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
-| Raspberry Pi + Hailo-8 | HailoRT/GStreamer | 已有 | 已实现，fixture + 2,602 条 RTSP 实时消息 | 已完成 synthetic、RTSP 单/双路、16 路最大路数与有人跌倒正向链路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
+| Raspberry Pi + Hailo-8 | HailoRT/GStreamer | 已有 | 已实现，fixture + 2,602 条 RTSP 实时消息 | 已完成 synthetic、RTSP 单/双路、S 16 路/M 5 路最大路数与有人跌倒正向链路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 
 ## 统一性能表
 
@@ -34,8 +34,10 @@
 |---|---|---:|---:|---|---|---|---|---|---|---|---|
 | reCamera SG2002 / OS 0.2.2 | YOLO11n-Pose CVI INT8 | 640² | 1 | 52.96 mean / 53 P95 | 10.00 FPS / pending | pending | 11.6 MB | pending | pending | N/A（appMgr deb） | 无标注现场 200 帧 |
 | reCamera Pro / firmware V1.0.4 | YOLO11n-Pose RKNN INT8 | 640²（720p camera frame） | 1 | 35.89 mean / 39.36 P95 | 13.05 FPS；77.80 / 85.99 ms mean/P95 | N/A（appMgr未暴露进程CPU） | 836.6–839.9 MB system used | NPU 19–21% | N/A（无可靠口径） | N/A（signed appMgr package） | 783帧/60秒；温度51.2–52.5°C；现场仅3帧有人，不作Accuracy |
-| Orin Nano | YOLO11s-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 context | 14.76/14.79 ms E2E infer；context aggregate 69.66/71.12/70.07/70.15/70.85 FPS | 14.94 FPS / 69.63 ms 输出间隔 P95 | 11.08% E2E | 211.3 MiB E2E | 24.82% mean | 9.07 W mean | 206 MB disk / 51.8 MB content | MAXN_SUPER；15 FPS 核心边界 4 路 |
-| Orin NX | YOLO11m-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 context | 20.98/21.03 ms E2E infer；context aggregate 53.83/54.27/53.60/53.60/53.54 FPS | 15.02 FPS / 69.74 ms 输出间隔 P95 | 10.43% E2E | 126.7 MiB E2E | 28.48% mean | 13.85 W mean | 206 MB disk / 51.8 MB content | MAXN_SUPER；15 FPS 核心边界 3 路；本轮前无业务容器 |
+| Orin Nano（2026-08-13 历史基线） | YOLO11s-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 inference context | 14.76/14.79 ms E2E infer；context aggregate 69.66/71.12/70.07/70.15/70.85 FPS | 单路 RTSP 14.94 FPS / 69.63 ms 输出间隔 P95 | 11.08% E2E | 211.3 MiB E2E | 24.82% mean | 9.07 W mean | 206 MB disk / 51.8 MB content | `--infStreams` 为推理-only；4 路是吞吐推算，不是 RTSP 容量实测 |
+| Orin NX（2026-08-13 历史基线） | YOLO11m-Pose TRT FP16 | 640² | 1 E2E；1/2/3/4/6 inference context | 20.98/21.03 ms E2E infer；context aggregate 53.83/54.27/53.60/53.60/53.54 FPS | 单路 RTSP 15.02 FPS / 69.74 ms 输出间隔 P95 | 10.43% E2E | 126.7 MiB E2E | 28.48% mean | 13.85 W mean | 206 MB disk / 51.8 MB content | `--infStreams` 为推理-only；3 路是吞吐推算，不是 RTSP 容量实测 |
+| Orin Nano Super（2026-08-20 当前边界） | YOLO11s-Pose TRT FP16 | 640² | 8 路通过；9 路失败 | 6.44 ms mean / 155.3 FPS `trtexec` core | 8 路各 14.95 FPS；9 路各 13.36 FPS | N/A（报告未记录） | 9 路 711 MiB | GR3D 91%@8 路 / 98%@9 路 | N/A（报告未记录） | N/A（当前报告未记录） | RTSP+MQTT 实测最大通过 8 路，阈值 14.5 FPS/路 |
+| Orin NX Super（2026-08-20 当前边界） | YOLO11s-Pose TRT FP16 | 640² | 9 路通过；10 路失败 | 5.75 ms mean / 173.8 FPS `trtexec` core | 9 路各 14.93 FPS；10 路各 13.05 FPS | N/A（报告未记录） | 8 路 664 MiB；9/10 路 N/A | GR3D 95%@9 路 / 99%@10 路 | N/A（报告未记录） | N/A（当前报告未记录） | RTSP+MQTT 实测最大通过 9 路，阈值 14.5 FPS/路 |
 | RK3576 | YOLO11n-Pose RKNN FP16 | 640² | 1/2 context | 63.03 mean / 74.44 P95 | 15.15 FPS；65.73 / 77.98 ms | 63.1% snapshot | 174.4 MiB | Core0/1 36%/0% snapshot | N/A（无可靠口径） | 257,793,213 B | 4 人 bus 图；2ctx blank 29.15 FPS |
 | RK3588 | YOLO11n-Pose RKNN FP16 | 640² | 1/2/3 context | 51.41 mean / 58.92 P95（1ctx） | 19.25 / 38.13 / 51.40 aggregate FPS | N/A（争用） | 189.9/217.6/294.8 MiB | 100%@1GHz（含既有负载） | N/A（无可靠口径） | 257,793,213 B | 现有 voice/RKLLM 争用；无 failed submit |
 | Raspberry Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 640² | 1/2；16 路 RTSP | 6.87 ms / 393.3 FPS（HailoRT） | 旧基线：单路 14.32 FPS、双路 14.33+14.30、有人流 14.72；本轮 16 路 14.5215–14.5715 FPS、probe 36.16–40.93 ms | 有人流 12.5% final；B17 246% | 有人流 130,784 KiB max；B17 1,366,592 KiB | N/A（CLI未给利用率） | N/A（无可靠板级遥测） | 143,442,009 B | 既有 2,602/2,602 MQTT contract 通过；本轮 ENABLE_MQTT=OFF，16 路为受控 RTSP 当前最大通过路数 |

@@ -111,22 +111,22 @@ Python GI bridge; the exact migration boundary is documented in
 
 ## Measured results
 
-All figures below are frozen evidence collected on 2026-08-13 and 2026-08-30.
-Different models and latency scopes are shown explicitly; see the
+All figures below are frozen evidence collected on 2026-08-13, 2026-08-20,
+and 2026-08-30. Different models and latency scopes are shown explicitly; see the
 [full results ledger](evaluation/RESULTS.md) before making a capacity or
 accuracy claim.
 
 ### Production RTSP path
 
-| Device | Pose frontend | Measured RTSP output | Inference or probe timing | Capacity evidence / starting point |
+| Device | Pose frontend | Highest tested live/RTSP load | Inference or probe timing | Next boundary / coverage |
 |---|---|---:|---:|---:|
-| Orin Nano | YOLO11s-Pose TRT FP16 | 14.94 FPS | 14.79 ms infer P95 | 4 × 15 FPS starting point |
-| Orin NX | YOLO11m-Pose TRT FP16 | 15.02 FPS | 21.03 ms infer P95 | 3 × 15 FPS starting point |
-| RK3576 | YOLO11n-Pose RKNN FP16 | 14.90 FPS low stream | 65.74 ms pipeline P95 | Validate 1–2 routes on final cameras |
-| RK3588 | YOLO11n-Pose RKNN FP16 | 14.67 FPS low stream | 83.20 ms pipeline P95 | Validate 1–3 routes on final cameras |
+| Orin Nano Super | YOLO11s-Pose TRT FP16 | 8 streams: 14.95 FPS each | 6.44 ms `trtexec` core mean | 9 streams failed at 13.36 FPS each |
+| Orin NX Super | YOLO11s-Pose TRT FP16 | 9 streams: 14.93 FPS each | 5.75 ms `trtexec` core mean | 10 streams failed at 13.05 FPS each |
+| RK3576 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.90 FPS | 65.74 ms pipeline P95 | Higher RTSP stream counts not tested |
+| RK3588 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.67 FPS | 83.20 ms pipeline P95 | Higher RTSP stream counts not tested |
 | Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8, single context | 16 streams: 14.52–14.57 FPS each | 36.16–40.93 ms mean pipeline | 16 × 15 FPS sources verified; 17 failed |
 | Pi 5 + Hailo-8 | YOLOv8m-Pose HEF INT8, 3 contexts | 5 streams: 14.98–15.02 FPS each | 71.08 ms HW / batch 8 | 5 × 15 FPS sources verified; 6 failed |
-| reCamera Pro | YOLO11n-Pose RKNN INT8 | 13.05 FPS live WebSocket | 39.36 ms infer / 85.99 ms pipeline P95 | 1 live camera verified |
+| reCamera Pro | YOLO11n-Pose RKNN INT8 | 1 live camera: 13.05 FPS WebSocket | 39.36 ms infer / 85.99 ms pipeline P95 | Higher live loads not tested; 14.5 FPS SLA not met |
 
 The 15 FPS rows are source-rate SLA checks, not a hardware ranking. Timing
 boundaries and known risks are documented in the
@@ -135,6 +135,11 @@ The Hailo S/M capacity boundaries were measured with MQTT publishing disabled;
 the rc3 image was separately smoke-tested with MQTT enabled for one S stream
 and one M stream. Earlier MQTT contract evidence remains in the
 [Hailo platform report](platforms/rpi-hailo/README.md#benchmark).
+The Jetson boundaries are MQTT-published RTSP results using YOLO11s on Super
+modules; they do not establish YOLO11m multi-stream capacity. Earlier Jetson
+`--infStreams` runs and RK multi-context runs are accelerator-only evidence,
+not RTSP route-count verification. A single tested reCamera Pro source is test
+coverage, not a measured maximum.
 
 ### Frozen GMDCSA Subject 4
 

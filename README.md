@@ -99,7 +99,7 @@ production defaults.
 |---|---|---|---|
 | Jetson Orin Nano/NX | Python | NVDEC/VIC → CUDA preprocess → TensorRT 10.3 | Published RC1; Nano/NX pull-back verified |
 | RK3576/RK3588 | Python | MPP/RGA → RKNNLite → pybind11 decode/NMS | Published RC2; both boards pull-back verified |
-| Raspberry Pi 5 + Hailo-8 | Native runtime; Python-control migration documented | GStreamer → `hailonet` → native tensor decode | Published RC1; Pi pull-back verified |
+| Raspberry Pi 5 + Hailo-8 | Native runtime; Python-control migration documented | GStreamer → `hailonet` or shared HailoRT batch → native tensor decode | Published RC3; Pi pull-back verified |
 | reCamera SG2002 | Native C++ | CVI Runtime INT8 | appMgr package; OS 0.2.2 verified |
 | reCamera Pro | Python app | RV1126B RKNN | Signed package, live target, and frozen native/fallback S4 comparison verified |
 
@@ -111,24 +111,30 @@ Python GI bridge; the exact migration boundary is documented in
 
 ## Measured results
 
-All figures below are frozen evidence from 2026-08-13. Different models and
-latency scopes are shown explicitly; see the [full results ledger](evaluation/RESULTS.md)
-before making a capacity or accuracy claim.
+All figures below are frozen evidence collected on 2026-08-13 and 2026-08-30.
+Different models and latency scopes are shown explicitly; see the
+[full results ledger](evaluation/RESULTS.md) before making a capacity or
+accuracy claim.
 
 ### Production RTSP path
 
-| Device | Pose frontend | Measured RTSP output | Inference or probe P95 | Recommended starting capacity |
+| Device | Pose frontend | Measured RTSP output | Inference or probe timing | Capacity evidence / starting point |
 |---|---|---:|---:|---:|
-| Orin Nano | YOLO11s-Pose TRT FP16 | 14.94 FPS | 14.79 ms infer | 4 × 15 FPS |
-| Orin NX | YOLO11m-Pose TRT FP16 | 15.02 FPS | 21.03 ms infer | 3 × 15 FPS |
-| RK3576 | YOLO11n-Pose RKNN FP16 | 14.90 FPS low stream | 65.74 ms pipeline | Validate 1–2 routes on final cameras |
-| RK3588 | YOLO11n-Pose RKNN FP16 | 14.67 FPS low stream | 83.20 ms pipeline | Validate 1–3 routes on final cameras |
-| Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 14.32 FPS single; 14.33+14.30 dual | 8.36 / 15.43 ms Hailo probe | 2 × 15 FPS verified |
-| reCamera Pro | YOLO11n-Pose RKNN INT8 | 13.05 FPS live WebSocket | 39.36 ms infer / 85.99 ms pipeline | 1 live camera verified |
+| Orin Nano | YOLO11s-Pose TRT FP16 | 14.94 FPS | 14.79 ms infer P95 | 4 × 15 FPS starting point |
+| Orin NX | YOLO11m-Pose TRT FP16 | 15.02 FPS | 21.03 ms infer P95 | 3 × 15 FPS starting point |
+| RK3576 | YOLO11n-Pose RKNN FP16 | 14.90 FPS low stream | 65.74 ms pipeline P95 | Validate 1–2 routes on final cameras |
+| RK3588 | YOLO11n-Pose RKNN FP16 | 14.67 FPS low stream | 83.20 ms pipeline P95 | Validate 1–3 routes on final cameras |
+| Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8, single context | 16 streams: 14.52–14.57 FPS each | 36.16–40.93 ms mean pipeline | 16 × 15 FPS sources verified; 17 failed |
+| Pi 5 + Hailo-8 | YOLOv8m-Pose HEF INT8, 3 contexts | 5 streams: 14.98–15.02 FPS each | 71.08 ms HW / batch 8 | 5 × 15 FPS sources verified; 6 failed |
+| reCamera Pro | YOLO11n-Pose RKNN INT8 | 13.05 FPS live WebSocket | 39.36 ms infer / 85.99 ms pipeline P95 | 1 live camera verified |
 
 The 15 FPS rows are source-rate SLA checks, not a hardware ranking. Timing
 boundaries and known risks are documented in the
 [performance fairness audit](evaluation/PERFORMANCE_FAIRNESS.md).
+The Hailo S/M capacity boundaries were measured with MQTT publishing disabled;
+the rc3 image was separately smoke-tested with MQTT enabled for one S stream
+and one M stream. Earlier MQTT contract evidence remains in the
+[Hailo platform report](platforms/rpi-hailo/README.md#benchmark).
 
 ### Frozen GMDCSA Subject 4
 

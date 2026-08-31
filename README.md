@@ -124,8 +124,8 @@ accuracy claim.
 | Orin NX Super | YOLO11s-Pose TRT FP16 | 9 streams: 14.93 FPS each | 5.75 ms `trtexec` core mean | 10 streams failed at 13.05 FPS each |
 | RK3576 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.90 FPS | 65.74 ms pipeline P95 | Higher RTSP stream counts not tested |
 | RK3588 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.67 FPS | 83.20 ms pipeline P95 | Higher RTSP stream counts not tested |
-| Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8, single context | 16 streams: 14.52–14.57 FPS each | 36.16–40.93 ms mean pipeline | 16 × 15 FPS sources verified; 17 failed |
-| Pi 5 + Hailo-8 | YOLOv8m-Pose HEF INT8, 3 contexts | 5 streams: 14.98–15.02 FPS each | 71.08 ms HW / batch 8 | 5 × 15 FPS sources verified; 6 failed |
+| Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8, single context | 16 streams: 14.52–14.57 FPS each | 36.16–40.93 ms mean pipeline | 17 streams failed the 14.5 FPS threshold |
+| Pi 5 + Hailo-8 | YOLOv8m-Pose HEF INT8, 3 contexts | 5 streams: 14.98–15.02 FPS each | 71.08 ms HW / batch 8 | 6 streams failed the 14.5 FPS threshold |
 | reCamera Pro | YOLO11n-Pose RKNN INT8 | 1 live camera: 13.05 FPS WebSocket | 39.36 ms infer / 85.99 ms pipeline P95 | Higher live loads not tested; 14.5 FPS SLA not met |
 
 The 15 FPS rows are source-rate SLA checks, not a hardware ranking. Timing

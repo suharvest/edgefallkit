@@ -240,12 +240,15 @@ Official Hailo Model Zoo v2.19.0 Hailo-8 `yolov8m_pose.hef` is 31,608,992 bytes,
 SHA256 `fa0bfbf83dba494f4d75ec2fd0ef497ca9d402a65c324afc9865ffc327a53514`, with
 3 contexts and 9 raw outputs. On `harvest-pi` with HailoRT 4.21, bare HailoRT
 measured 30.87–30.98 FPS and 26.92–26.97 ms hardware latency. Synthetic app
-throughput on the former per-stream batch-1 path was 30.0 FPS (one stream),
+Before the shared backend was added, throughput on the per-stream batch-1 path
+was 30.0 FPS (one stream),
 15.4862 / 15.4695 (two), and 10.3143 / 10.3143 / 10.3309 (three). Controlled
 RTSP 640x640@15 on that path measured 15.0098 /
 14.9932 FPS for two streams and 10.3278 / 10.3278 / 10.3111 for three; at the
-14.5 FPS target its maximum was two RTSP streams. `ENABLE_MQTT=OFF` excluded
-broker publishing because mosquitto development headers were unavailable.
+14.5 FPS target this historical path reached two RTSP streams. This is the
+pre-optimization baseline, not the current maximum; the shared auto-batch
+result below supersedes it. `ENABLE_MQTT=OFF` excluded broker publishing
+because mosquitto development headers were unavailable.
 
 Bare-HEF batching increased total throughput to 69.38 FPS at batch 4
 (45.67 ms hardware latency per batch) and 86.91 FPS at batch 8 (71.08 ms per

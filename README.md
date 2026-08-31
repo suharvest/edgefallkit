@@ -171,6 +171,24 @@ Multi-stream deployment uses independent decode/inference contexts and trackers.
 Jetson production uses batch 1; the measured static batch-4 experiment is a
 throughput artifact, not the current application ABI.
 
+### Hailo-8 validated RTSP capacity
+
+The current Raspberry Pi 5 + Hailo-8 results use a 640x640 H.264 source at
+15 FPS and require every stream to sustain at least 14.5 FPS:
+
+| Pose HEF | Compiled topology | Runtime path | Maximum passing streams | Measured aggregate FPS |
+|---|---|---|---:|---:|
+| YOLOv8s-Pose, official v2.15 | Single context | Legacy per-stream `hailonet` | 16 | 233.6 |
+| YOLOv8m-Pose, official v2.19 | 3 contexts | Shared direct-HailoRT auto batch | 5 | 75.0 |
+
+The next tested boundaries failed: 17 streams for S and 6 streams for M. MQTT
+publishing was disabled during these capacity runs, so the figures cover RTSP
+decode through payload construction rather than broker delivery. The rc3 image
+was separately smoke-tested with MQTT enabled for single-stream S and M. See
+the [Hailo platform report](platforms/rpi-hailo/README.md#benchmark) and the
+[machine-readable S](evaluation/reports/rpi-hailo8-multistream-20260830.json)
+and [M](evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json) reports.
+
 ## Published images and models
 
 | Runtime | Published image | Immutable RepoDigest |

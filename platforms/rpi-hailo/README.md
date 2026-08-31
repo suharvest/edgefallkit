@@ -36,7 +36,7 @@ checked against the fixed SHA256, and atomically renamed; any model, pull, or
 Compose validation failure occurs before `docker compose up`.
 
 The default published runtime is
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1`.
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc3`.
 Override it with `FALL_HAILO_IMAGE=...` for a pinned mirror or local build. To
 rebuild instead of pull:
 
@@ -121,15 +121,18 @@ Pi-native image build was verified as `fall-detection-rpi-hailo:4.21`, digest
 with 143,442,009 bytes content size (`docker images` reports about 533 MB disk usage
 including unpacked/shared layers).
 
-The RC image was pushed and pulled back on `harvest-pi` as
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1`.
+The MQTT-enabled RC image was pushed from Fleet `spark` and pulled back on
+`harvest-pi` as
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc3`.
 The registry RepoDigest is
-`sha256:1243fb26141a43f67434e1954e6f7ff227e27b8de8aabe2a50a0e3cb48f823a0`;
-device-side inspect after the pull reports 144,679,212 bytes, Linux/ARM64, and
-entrypoint `/usr/local/bin/fall-hailo`. A metadata-only container smoke verified
-the executable while deliberately mounting neither `/dev/hailo0` nor the HEF,
-so it did not exercise or compete for the NPU. The existing `mcp_face_rec`
-container remained healthy.
+`sha256:994b363dc1aa68d3ada0ca3590bd810ab26a2240918bcffe426104761a2f772a`;
+registry inspection and device-side pull report Linux/ARM64, revision
+`8fbe716ba26261f2e6973185fa42b00c1a45aabe`, and entrypoint
+`/usr/local/bin/fall-hailo`. The production binary SHA256 is
+`d924c38ea07a9011b249f1630d91c325bd420f9d0c2175ead355a9081da676d6`.
+Single-stream synthetic-input smoke tests exercised the NPU and MQTT with both
+the default YOLOv8s HEF and official YOLOv8m HEF; the existing `mcp_face_rec`
+container was restored afterward and verified healthy.
 
 ### Mac RTSP end-to-end control test
 

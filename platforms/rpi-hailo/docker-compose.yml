@@ -17,7 +17,7 @@ services:
     build:
       context: ../..
       dockerfile: platforms/rpi-hailo/Dockerfile
-    image: ${FALL_HAILO_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1}
+    image: ${FALL_HAILO_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc3}
     network_mode: host
     restart: unless-stopped
     devices:
@@ -25,7 +25,7 @@ services:
     environment:
       HAILO_BATCH_MODE: ${HAILO_BATCH_MODE:-auto}
       HAILO_BATCH_WAIT_MS: ${HAILO_BATCH_WAIT_MS:-20}
-      HEF_PATH: /models/yolov8s_pose.hef
+      HEF_PATH: ${HEF_PATH:-/models/yolov8s_pose.hef}
       # Semicolon-separated id|URL entries; add entries for multi-stream use.
       STREAMS: "${STREAMS:-cam-01|rtsp://192.168.1.10:554/stream1}"
       RTSP_LATENCY_MS: ${RTSP_LATENCY_MS:-100}
@@ -46,7 +46,7 @@ services:
       - /usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgsthailo.so:/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgsthailo.so:ro
       - /usr/lib/libhailort.so.4.21.0:/usr/lib/libhailort.so.4.21.0:ro
     healthcheck:
-      test: ["CMD-SHELL", "test -c /dev/hailo0 && test -r /models/yolov8s_pose.hef"]
+      test: ["CMD-SHELL", "test -c /dev/hailo0 && test -r \"$$HEF_PATH\""]
       interval: 30s
       timeout: 5s
       retries: 3

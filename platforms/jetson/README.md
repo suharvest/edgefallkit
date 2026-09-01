@@ -210,7 +210,30 @@ contexts therefore provide scheduling isolation, not proportional throughput.
 The real RTSP application also produced person detections with all eight
 device/model/precision combinations. INT8 and FP16 fall-state counts differed,
 including zero M INT8 fall-state frames in the measured windows; this smoke
-test is not an accuracy equivalence result. See the
+test is not an accuracy equivalence result.
+
+The embedded `yolov8-int8-pose` temporal profile was subsequently fit with S/M
+INT8 Subjects 1–2 traces, selected on Subject 3, refit on Subjects 1–3, and
+evaluated without using Subject 4 for selection. The 27-clip deployed evaluator
+produced the following idle-device results:
+
+| Device / frontend | Temporal gate TP/FN/TN/FP, F1 | Deployed TP/FN/TN/FP, F1 | Pose coverage | Mean inference |
+|---|---|---|---:|---:|
+| Orin Nano Super / YOLOv8s INT8 | 9/3/13/2, 78.3% | 7/5/13/2, 66.7% | 78.3% | 5.28 ms |
+| Orin NX Super / YOLOv8s INT8 | 9/3/13/2, 78.3% | 7/5/13/2, 66.7% | 78.3% | 4.72 ms |
+| Orin Nano Super / YOLOv8m INT8 | 4/8/12/3, 42.1% | 0/12/12/3, 0.0% | 64.7% | 9.87 ms |
+| Orin NX Super / YOLOv8m INT8 | 5/7/12/3, 50.0% | 0/12/12/3, 0.0% | 64.5% | 8.80 ms |
+
+The M result is bounded by frontend coverage rather than Orin throughput.
+Subject 4 Fall/03, Fall/04 and Fall/08 pose coverage changed from
+76.0%/54.9%/57.4% with S to 23.0%/7.0%/42.6% with M. The existing calibration
+candidates include Subject 4, so this table is engineering validation and does
+not replace the publication-grade frozen accuracy table. See the
+[development report](evaluation/temporal-yolov8-int8-development.json) and the
+[Nano S](evaluation/eval-nano-s-int8.json),
+[Nano M](evaluation/eval-nano-m-int8.json),
+[NX S](evaluation/eval-nx-s-int8.json), and
+[NX M](evaluation/eval-nx-m-int8.json) deployed reports. See also the
 [structured cross-precision report](../../evaluation/reports/jetson-yolov8-crossprecision-20260901.json).
 
 `tools/build_engine.sh` assumes dynamic input shapes. For an ONNX graph already
@@ -424,9 +447,10 @@ Before starting, edit `config/config.json`:
 }
 ```
 
-`temporal_profile=auto` selects the independently trained `yolo11s-pose` or
-`yolo11m-pose` temporal weights from the engine filename. Set the profile
-explicitly when an engine is renamed. The two profiles are embedded in the
+`temporal_profile=auto` selects `yolov8-int8-pose` when the engine filename
+contains both `yolov8` and `int8`; otherwise it selects the independently
+trained `yolo11s-pose` or `yolo11m-pose` weights. Set the profile explicitly
+when an engine is renamed. The profiles are embedded in the
 native library, so switching between the recommended Nano and NX engines does
 not require Torch, Ultralytics, scikit-learn, or another runtime model file.
 

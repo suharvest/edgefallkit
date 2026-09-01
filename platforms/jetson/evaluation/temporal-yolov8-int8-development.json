@@ -1,0 +1,189 @@
+{
+  "protocol": "fit Subjects 1-2; select on Subject 3; refit Subjects 1-3; Subject 4 excluded from fitting/selection and read only after freeze",
+  "trace_frontends": [
+    "traces-s-int8",
+    "traces-m-int8"
+  ],
+  "best": {
+    "variant": "shape",
+    "hidden": 16,
+    "alpha": 0.01,
+    "threshold": 0.7499999999999999,
+    "consecutive": 2,
+    "validation": {
+      "n": 86,
+      "tp": 42,
+      "fn": 0,
+      "tn": 34,
+      "fp": 10,
+      "accuracy": 0.8837209302325582,
+      "recall": 1.0,
+      "specificity": 0.7727272727272727,
+      "precision": 0.8076923076923077,
+      "f1": 0.8936170212765957,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 0.819047619047619,
+      "median_detection_latency_sec": 0.6500000000000001,
+      "misclassified": [
+        "subject-3/ADL/04.jsonl",
+        "subject-3/ADL/07.jsonl",
+        "subject-3/ADL/08.jsonl",
+        "subject-3/ADL/11.jsonl",
+        "subject-3/ADL/19.jsonl",
+        "subject-3/ADL/02.jsonl",
+        "subject-3/ADL/04.jsonl",
+        "subject-3/ADL/07.jsonl",
+        "subject-3/ADL/11.jsonl",
+        "subject-3/ADL/19.jsonl"
+      ]
+    },
+    "validation_by_frontend": {
+      "traces-s-int8": {
+        "n": 43,
+        "tp": 21,
+        "fn": 0,
+        "tn": 17,
+        "fp": 5,
+        "accuracy": 0.8837209302325582,
+        "recall": 1.0,
+        "specificity": 0.7727272727272727,
+        "precision": 0.8076923076923077,
+        "f1": 0.8936170212765957,
+        "early_fall_alerts": 0,
+        "mean_detection_latency_sec": 0.7476190476190476,
+        "median_detection_latency_sec": 0.7000000000000002,
+        "misclassified": [
+          "subject-3/ADL/04.jsonl",
+          "subject-3/ADL/07.jsonl",
+          "subject-3/ADL/08.jsonl",
+          "subject-3/ADL/11.jsonl",
+          "subject-3/ADL/19.jsonl"
+        ]
+      },
+      "traces-m-int8": {
+        "n": 43,
+        "tp": 21,
+        "fn": 0,
+        "tn": 17,
+        "fp": 5,
+        "accuracy": 0.8837209302325582,
+        "recall": 1.0,
+        "specificity": 0.7727272727272727,
+        "precision": 0.8076923076923077,
+        "f1": 0.8936170212765957,
+        "early_fall_alerts": 0,
+        "mean_detection_latency_sec": 0.8904761904761906,
+        "median_detection_latency_sec": 0.6000000000000001,
+        "misclassified": [
+          "subject-3/ADL/02.jsonl",
+          "subject-3/ADL/04.jsonl",
+          "subject-3/ADL/07.jsonl",
+          "subject-3/ADL/11.jsonl",
+          "subject-3/ADL/19.jsonl"
+        ]
+      }
+    },
+    "min_frontend_f1": 0.8936170212765957,
+    "validation_f1": 0.8936170212765957,
+    "validation_balanced_accuracy": 0.8863636363636364
+  },
+  "frozen_subject4_by_frontend": {
+    "traces-nx-s-int8-s4": {
+      "n": 27,
+      "tp": 10,
+      "fn": 2,
+      "tn": 12,
+      "fp": 3,
+      "accuracy": 0.8148148148148148,
+      "recall": 0.8333333333333334,
+      "specificity": 0.8,
+      "precision": 0.7692307692307693,
+      "f1": 0.8,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 1.0699999999999998,
+      "median_detection_latency_sec": 1.0,
+      "misclassified": [
+        "subject-4/ADL/06.jsonl",
+        "subject-4/ADL/07.jsonl",
+        "subject-4/ADL/08.jsonl",
+        "subject-4/Fall/06.jsonl",
+        "subject-4/Fall/08.jsonl"
+      ]
+    },
+    "traces-nx-m-int8-s4": {
+      "n": 27,
+      "tp": 7,
+      "fn": 5,
+      "tn": 12,
+      "fp": 3,
+      "accuracy": 0.7037037037037037,
+      "recall": 0.5833333333333334,
+      "specificity": 0.8,
+      "precision": 0.7,
+      "f1": 0.6363636363636365,
+      "early_fall_alerts": 2,
+      "mean_detection_latency_sec": 1.5571428571428572,
+      "median_detection_latency_sec": 1.5999999999999999,
+      "misclassified": [
+        "subject-4/ADL/06.jsonl",
+        "subject-4/ADL/07.jsonl",
+        "subject-4/ADL/16.jsonl",
+        "subject-4/Fall/02.jsonl",
+        "subject-4/Fall/03.jsonl",
+        "subject-4/Fall/06.jsonl",
+        "subject-4/Fall/08.jsonl",
+        "subject-4/Fall/16.jsonl"
+      ]
+    },
+    "traces-nano-s-int8-s4": {
+      "n": 27,
+      "tp": 10,
+      "fn": 2,
+      "tn": 12,
+      "fp": 3,
+      "accuracy": 0.8148148148148148,
+      "recall": 0.8333333333333334,
+      "specificity": 0.8,
+      "precision": 0.7692307692307693,
+      "f1": 0.8,
+      "early_fall_alerts": 0,
+      "mean_detection_latency_sec": 1.0699999999999998,
+      "median_detection_latency_sec": 1.0,
+      "misclassified": [
+        "subject-4/ADL/06.jsonl",
+        "subject-4/ADL/07.jsonl",
+        "subject-4/ADL/08.jsonl",
+        "subject-4/Fall/06.jsonl",
+        "subject-4/Fall/08.jsonl"
+      ]
+    },
+    "traces-nano-m-int8-s4": {
+      "n": 27,
+      "tp": 7,
+      "fn": 5,
+      "tn": 12,
+      "fp": 3,
+      "accuracy": 0.7037037037037037,
+      "recall": 0.5833333333333334,
+      "specificity": 0.8,
+      "precision": 0.7,
+      "f1": 0.6363636363636365,
+      "early_fall_alerts": 2,
+      "mean_detection_latency_sec": 1.6142857142857143,
+      "median_detection_latency_sec": 1.5999999999999999,
+      "misclassified": [
+        "subject-4/ADL/06.jsonl",
+        "subject-4/ADL/07.jsonl",
+        "subject-4/ADL/16.jsonl",
+        "subject-4/Fall/02.jsonl",
+        "subject-4/Fall/03.jsonl",
+        "subject-4/Fall/06.jsonl",
+        "subject-4/Fall/08.jsonl",
+        "subject-4/Fall/16.jsonl"
+      ]
+    }
+  },
+  "window_frames": 48,
+  "stride_frames": 3,
+  "feature_dim": 504
+}

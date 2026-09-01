@@ -60,10 +60,22 @@ Hailo S batch 8 的持续吞吐为 320.64 FPS，未高于 batch 1。
 pipeline 的起点不同，不相互排名。结构化 Hailo 证据见
 [`reports/rpi-hailo8-aligned-20260901.json`](reports/rpi-hailo8-aligned-20260901.json)。
 INT8 应用测试只证明真实人物帧能产生有效输出，不是精度等价评测；校准候选包含
-Subject 4，因此这些引擎不能用于刷新冻结 S4 Accuracy/F1。若要发布 INT8 准确率，
-需改用不含 S4 的校准集，重新抽取 INT8 traces 并执行冻结协议。本轮 INT8 与 FP16
-的 fall-state 帧数差异明显，M INT8 的两个 60 秒窗口均为 0 个 fall-state 帧，不能
-把性能提升外推成检测精度等价。完整 Jetson 证据见
+Subject 4，因此这些引擎不能用于刷新冻结 S4 Accuracy/F1。新增的
+`yolov8-int8-pose` 使用 S/M INT8 的 Subjects 1–2 traces 训练、Subject 3 选参、
+Subjects 1–3 重拟合，再只读 27 段 clean Subject 4。完整部署评测如下；因 engine
+校准集仍含 S4，只记为工程验证，不并入下方冻结准确率主表。
+
+| 设备/前端 | Temporal gate TP/FN/TN/FP / F1 | Deployed TP/FN/TN/FP / F1 | Pose coverage | Application inference mean |
+|---|---|---|---:|---:|
+| Orin Nano / YOLOv8s INT8 | 9/3/13/2 / 78.3% | 7/5/13/2 / 66.7% | 78.3% | 5.28 ms |
+| Orin NX / YOLOv8s INT8 | 9/3/13/2 / 78.3% | 7/5/13/2 / 66.7% | 78.3% | 4.72 ms |
+| Orin Nano / YOLOv8m INT8 | 4/8/12/3 / 42.1% | 0/12/12/3 / 0.0% | 64.7% | 9.87 ms |
+| Orin NX / YOLOv8m INT8 | 5/7/12/3 / 50.0% | 0/12/12/3 / 0.0% | 64.5% | 8.80 ms |
+
+M 的限制出现在 pose frontend：Subject 4 Fall/03、Fall/04、Fall/08 的 coverage
+由 S 的 76.0%/54.9%/57.4% 降至 M 的 23.0%/7.0%/42.6%。时序模型无法恢复
+已被前端阈值拒绝的姿态帧。若要发布 INT8 准确率，仍需使用不含 S4 的校准集重建
+engine 后重跑。完整 Jetson 性能证据见
 [`reports/jetson-yolov8-crossprecision-20260901.json`](reports/jetson-yolov8-crossprecision-20260901.json)。
 
 本轮未刷新 RK3576/RK3588，按测试计划后置。`recamera-pro-test` 多次停在 SSH

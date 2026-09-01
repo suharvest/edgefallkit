@@ -9,6 +9,7 @@
 #include "temporal_model_weights.h"
 #include "temporal_model_weights_hailo.h"
 #include "temporal_model_weights_yolo11m.h"
+#include "temporal_model_weights_yolov8_int8.h"
 
 namespace jetson_fall {
 
@@ -17,6 +18,7 @@ using TemporalFrame = std::array<float, temporal_weights::kFrameDim>;
 enum class TemporalProfile {
     Yolo11sPose,
     Yolo11mPose,
+    YoloV8Int8Pose,
     Hailo8YoloV8sPose,
 };
 

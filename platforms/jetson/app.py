@@ -122,11 +122,7 @@ class TrtBridge:
         library_path = config.get("trt_library", "/app/libjetson_fall_trt.so")
         self.library = ctypes.CDLL(library_path)
         self._bind_api()
-        configured_profile = str(config.get("temporal_profile", "auto"))
-        if configured_profile == "auto":
-            engine_name = Path(str(config["engine_path"])).name.lower()
-            configured_profile = "yolo11m-pose" if "yolo11m" in engine_name else "yolo11s-pose"
-        self.temporal_profile = configured_profile
+        self.temporal_profile = resolve_temporal_profile(config)
         self.handle = self.library.jf_trt_create(
             os.fsencode(config["engine_path"]),
             int(config.get("input", {}).get("width", 640)),
@@ -751,6 +747,19 @@ class StreamWorker(threading.Thread):
         }
 
 
+TEMPORAL_PROFILES = ("auto", "yolo11s-pose", "yolo11m-pose", "yolov8-int8-pose")
+
+
+def resolve_temporal_profile(config: dict[str, Any]) -> str:
+    configured = str(config.get("temporal_profile", "auto"))
+    if configured != "auto":
+        return configured
+    engine_name = Path(str(config["engine_path"])).name.lower()
+    if "yolov8" in engine_name and "int8" in engine_name:
+        return "yolov8-int8-pose"
+    return "yolo11m-pose" if "yolo11m" in engine_name else "yolo11s-pose"
+
+
 def load_config(path: str) -> dict[str, Any]:
     with open(path, "r", encoding="utf-8") as stream:
         config = json.load(stream)
@@ -759,8 +768,8 @@ def load_config(path: str) -> dict[str, Any]:
     if not config.get("engine_path"):
         raise ValueError("engine_path must not be empty")
     temporal_profile = config.setdefault("temporal_profile", "auto")
-    if temporal_profile not in ("auto", "yolo11s-pose", "yolo11m-pose"):
-        raise ValueError("temporal_profile must be auto, yolo11s-pose, or yolo11m-pose")
+    if temporal_profile not in TEMPORAL_PROFILES:
+        raise ValueError(f"temporal_profile must be one of {', '.join(TEMPORAL_PROFILES)}")
     input_config = config.get("input", {})
     width = int(input_config.get("width", 640))
     height = int(input_config.get("height", 640))

@@ -17,13 +17,18 @@ static_assert(temporal_weights::kFeatureDim == temporal_weights::kFrameDim * (kB
 static_assert(temporal_yolo11m_weights::kWindow == temporal_weights::kWindow);
 static_assert(temporal_yolo11m_weights::kFrameDim == temporal_weights::kFrameDim);
 static_assert(temporal_yolo11m_weights::kFeatureDim == temporal_weights::kFeatureDim);
+static_assert(temporal_yolov8_int8_weights::kWindow == temporal_weights::kWindow);
+static_assert(temporal_yolov8_int8_weights::kFrameDim == temporal_weights::kFrameDim);
+static_assert(temporal_yolov8_int8_weights::kFeatureDim == temporal_weights::kFeatureDim);
 static_assert(temporal_hailo_weights::kWindow == temporal_weights::kWindow);
 static_assert(temporal_hailo_weights::kFrameDim == temporal_weights::kFrameDim);
 static_assert(temporal_hailo_weights::kFeatureDim == temporal_weights::kFeatureDim);
 constexpr int kJetsonMaxHiddenDim = temporal_weights::kHiddenDim > temporal_yolo11m_weights::kHiddenDim
     ? temporal_weights::kHiddenDim : temporal_yolo11m_weights::kHiddenDim;
-constexpr int kMaxHiddenDim = kJetsonMaxHiddenDim > temporal_hailo_weights::kHiddenDim
-    ? kJetsonMaxHiddenDim : temporal_hailo_weights::kHiddenDim;
+constexpr int kJetsonInt8MaxHiddenDim = kJetsonMaxHiddenDim > temporal_yolov8_int8_weights::kHiddenDim
+    ? kJetsonMaxHiddenDim : temporal_yolov8_int8_weights::kHiddenDim;
+constexpr int kMaxHiddenDim = kJetsonInt8MaxHiddenDim > temporal_hailo_weights::kHiddenDim
+    ? kJetsonInt8MaxHiddenDim : temporal_hailo_weights::kHiddenDim;
 
 struct WeightView {
     int hidden_dim;
@@ -39,6 +44,18 @@ struct WeightView {
 };
 
 WeightView weightsFor(TemporalProfile profile) {
+    if (profile == TemporalProfile::YoloV8Int8Pose) {
+        return {temporal_yolov8_int8_weights::kHiddenDim,
+                temporal_yolov8_int8_weights::kThreshold,
+                temporal_yolov8_int8_weights::kConsecutive,
+                temporal_yolov8_int8_weights::kFrameMask,
+                temporal_yolov8_int8_weights::kMean,
+                temporal_yolov8_int8_weights::kScale,
+                temporal_yolov8_int8_weights::kW1,
+                temporal_yolov8_int8_weights::kB1,
+                temporal_yolov8_int8_weights::kW2,
+                temporal_yolov8_int8_weights::kB2};
+    }
     if (profile == TemporalProfile::Hailo8YoloV8sPose) {
         return {temporal_hailo_weights::kHiddenDim,
                 temporal_hailo_weights::kThreshold,

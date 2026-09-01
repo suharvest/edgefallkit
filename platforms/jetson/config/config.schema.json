@@ -7,9 +7,9 @@
     "trt_library": {"type": "string", "minLength": 1},
     "temporal_profile": {
       "type": "string",
-      "enum": ["auto", "yolo11s-pose", "yolo11m-pose"],
+      "enum": ["auto", "yolo11s-pose", "yolo11m-pose", "yolov8-int8-pose"],
       "default": "auto",
-      "description": "Temporal weights; auto infers yolo11m from the engine filename and otherwise uses yolo11s."
+      "description": "Temporal weights; auto selects the shared YOLOv8 INT8 profile for calibrated INT8 engines, yolo11m for YOLO11m engines, and otherwise yolo11s."
     },
     "input": {
       "type": "object",

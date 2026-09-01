@@ -37,6 +37,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--traces", type=Path, action="append", required=True,
                         help="repeat to train one model across multiple pose frontends")
+    parser.add_argument("--test-traces", type=Path, action="append", default=[],
+                        help="repeat for frozen Subject-4 reporting; never used for selection")
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--header", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
@@ -95,6 +97,23 @@ def main() -> int:
     mask = training.FRAME_MASKS[best["variant"]]
     scaler, model = training.fit_model(clips, {1, 2, 3}, best["hidden"], best["alpha"], 2026, mask)
 
+    frozen_test_by_frontend = {}
+    for root in args.test_traces:
+        subject4 = training.load_clips(root, args.dataset, {4})
+        clean = [
+            clip for clip in subject4
+            if (clip.path.parent.name, clip.path.stem) not in training.SMOKE_TEST_CLIPS
+        ]
+        if len(subject4) != training.EXPECTED_SUBJECT_CLIPS[4] or len(clean) != 27:
+            raise RuntimeError(
+                f"incomplete frozen traces for {root.name}: total={len(subject4)} clean={len(clean)}")
+        probabilities = {
+            clip.path: training.clip_probability(clip, scaler, model, mask)
+            for clip in clean
+        }
+        frozen_test_by_frontend[root.name] = training.metrics(
+            clean, probabilities, best["threshold"], best["consecutive"])
+
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as temporary:
@@ -106,9 +125,13 @@ def main() -> int:
             encoding="utf-8",
         )
     report = {
-        "protocol": "fit Subjects 1-2; select on Subject 3; refit Subjects 1-3; no Subject 4",
+        "protocol": (
+            "fit Subjects 1-2; select on Subject 3; refit Subjects 1-3; "
+            "Subject 4 excluded from fitting/selection and read only after freeze"
+        ),
         "trace_frontends": [path.name for path in args.traces],
         "best": best,
+        "frozen_subject4_by_frontend": frozen_test_by_frontend,
         "window_frames": training.WINDOW,
         "stride_frames": training.STRIDE,
         "feature_dim": training.FEATURE_DIM,

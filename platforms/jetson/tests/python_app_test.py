@@ -215,6 +215,23 @@ def test_runtime_section_is_validated():
             os.unlink(handle.name)
 
 
+def test_temporal_profile_auto_switches_for_yolov8_int8():
+    assert APP.resolve_temporal_profile({
+        "engine_path": "/models/yolov8s-pose.gmdcsa64-int8.engine",
+        "temporal_profile": "auto",
+    }) == "yolov8-int8-pose"
+    assert APP.resolve_temporal_profile({
+        "engine_path": "/models/yolov8m-pose.calibrated-int8.engine",
+    }) == "yolov8-int8-pose"
+    assert APP.resolve_temporal_profile({
+        "engine_path": "/models/yolov8m-pose.fp16.engine",
+    }) == "yolo11s-pose"
+    assert APP.resolve_temporal_profile({
+        "engine_path": "/models/renamed.engine",
+        "temporal_profile": "yolov8-int8-pose",
+    }) == "yolov8-int8-pose"
+
+
 def test_shard_client_id_is_unique_per_shard():
     """A shared broker client id makes the broker evict the previous session."""
     assert APP.shard_client_id("jetson-fall-detection", 0, 1) == "jetson-fall-detection"
@@ -240,6 +257,7 @@ def main():
     test_worker_count_shards_by_calibrated_capacity()
     test_shard_streams_is_balanced_and_lossless()
     test_runtime_section_is_validated()
+    test_temporal_profile_auto_switches_for_yolov8_int8()
     test_shard_client_id_is_unique_per_shard()
     print("python_app_test passed")
 

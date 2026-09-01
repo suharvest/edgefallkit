@@ -171,6 +171,52 @@ tools/benchmark_multicontext.sh models/model.engine /tmp/result 1 2 3 4 6
 tools/summarize_multicontext.py /tmp/result
 ```
 
+### Calibrated INT8 engines
+
+`trtexec --int8` without calibration does not produce a detection-valid
+comparison. Build INT8 engines on each destination Orin with an explicit image
+manifest and a model-specific cache:
+
+```bash
+tools/make_gmdcsa_calib.sh /data/gmdcsa24 /data/calib-yolov8 64
+python3 tools/build_calibrated_int8.py \
+  --onnx models/yolov8s-pose.onnx \
+  --manifest /data/calib-yolov8/calibration.txt \
+  --cache models/yolov8s-pose.int8.cache \
+  --engine models/yolov8s-pose.int8.engine
+```
+
+The builder uses centered 640-square letterbox preprocessing, RGB order and
+`float32 / 255`, then enables INT8 with FP16 fallback for layers without an
+INT8 implementation. Keep separate cache files for different ONNX graphs.
+Performance qualification still requires a real-image application smoke test;
+successful random-input `trtexec` timing alone does not prove usable pose
+outputs.
+
+The 2026-09-01 idle-device run used the same YOLOv8 ONNX files and the same 64
+calibration image contents on both Orins. Each core row is the median of three
+120-second runs after 30 seconds warm-up:
+
+| Device / model | FP16 FPS / mean | Calibrated INT8 FPS / mean | INT8 speedup |
+|---|---:|---:|---:|
+| Orin Nano Super / YOLOv8s-Pose | 169.66 / 5.89 ms | 266.34 / 3.75 ms | 1.57x |
+| Orin Nano Super / YOLOv8m-Pose | 76.64 / 13.05 ms | 123.22 / 8.11 ms | 1.61x |
+| Orin NX Super / YOLOv8s-Pose | 192.37 / 5.20 ms | 299.61 / 3.34 ms | 1.56x |
+| Orin NX Super / YOLOv8m-Pose | 88.26 / 11.33 ms | 139.16 / 7.18 ms | 1.58x |
+
+Two and four `--infStreams` kept aggregate INT8 throughput near the one-stream
+result while dividing per-context FPS and increasing per-context latency. More
+contexts therefore provide scheduling isolation, not proportional throughput.
+The real RTSP application also produced person detections with all eight
+device/model/precision combinations. INT8 and FP16 fall-state counts differed,
+including zero M INT8 fall-state frames in the measured windows; this smoke
+test is not an accuracy equivalence result. See the
+[structured cross-precision report](../../evaluation/reports/jetson-yolov8-crossprecision-20260901.json).
+
+`tools/build_engine.sh` assumes dynamic input shapes. For an ONNX graph already
+fixed at `1x3x640x640`, set `TRT_STATIC_SHAPE=true` so the script does not pass
+an unnecessary optimization profile.
+
 ### Static batch throughput experiment
 
 The source ONNX inputs are genuinely dynamic (`images=[batch,3,height,width]`),

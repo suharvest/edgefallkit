@@ -1,0 +1,94 @@
+{
+  "date": "2026-09-01",
+  "scope": "YOLOv8 S/M TensorRT FP16 versus calibrated INT8 performance",
+  "protocol": {
+    "input": "1x3x640x640",
+    "batch": 1,
+    "runtime_inference_streams": 1,
+    "core_warmup_seconds": 30,
+    "core_duration_seconds": 120,
+    "core_repetitions": 3,
+    "core_metric": "TensorRT GPU Compute Time with CUDA graph and no data transfers",
+    "application_source": "Spark LAN fall-person, H.264 640x640@15",
+    "application_window": "last 60 seconds by capture arrival_monotonic_ns",
+    "application_metric": "preprocess, copies, TensorRT, output copy and pose parsing",
+    "calibration": "IInt8EntropyCalibrator2 with centered letterbox RGB float/255 and FP16 layer fallback",
+    "calibration_image_count": 64,
+    "calibration_content_set_sha256": "b197720617d1953b989b2dffac88244f8b8f1b73a3e10e400b9a22bba6ed615a",
+    "calibration_warning": "Candidates include GMDCSA Subject 4; these engines cannot be used to refresh the frozen S4 accuracy result."
+  },
+  "model_hashes": {
+    "yolov8s_pose_onnx_sha256": "95ab38a6bcad2ec4e77c44b2f6814ed8cc2aa213574da83b74a01e7502b50919",
+    "yolov8m_pose_onnx_sha256": "b44ece4006060bd708b7a542f25ae76c758ba2827a6ebe2e22b18be548e23a0b"
+  },
+  "orin_nano_super": {
+    "interference_control": {
+      "stopped_before_measurement": ["ovs-sv-test"],
+      "other_non_test_containers_during_measurement": [],
+      "restored_after_measurement": ["ovs-sv-test"]
+    },
+    "engine_hashes": {
+      "s_int8": "4575a94e85e41787ed317d0bb731e77b1f4c9cac493bc31360a65659176da5a2",
+      "s_fp16": "c521ffc8fd7836d4dc01b046e04e8790df743a69e5f3f963bb8a3c2059ee6577",
+      "m_int8": "e7d82f1efd45a61fa2d32acb0fec8a03a9add693beb73e663801d052daecddde",
+      "m_fp16": "5396301eeb105e13190723e43be87bd7be35c343000d5ba6a0e9b64fb3d4b886"
+    },
+    "core_medians": {
+      "s_int8": {"fps": 266.342, "gpu_mean_ms": 3.7514, "gpu_p95_ms": 3.75781, "board_power_w": 17.382},
+      "s_fp16": {"fps": 169.658, "gpu_mean_ms": 5.89132, "gpu_p95_ms": 5.90625, "board_power_w": 21.007},
+      "m_int8": {"fps": 123.215, "gpu_mean_ms": 8.11317, "gpu_p95_ms": 8.14062, "board_power_w": 18.937},
+      "m_fp16": {"fps": 76.641, "gpu_mean_ms": 13.045, "gpu_p95_ms": 13.3203, "board_power_w": 22.237}
+    },
+    "int8_context_capacity": {
+      "s_contexts_2": {"aggregate_fps": 265.649, "per_context_fps": 132.825, "gpu_mean_ms": 7.52193, "gpu_p95_ms": 7.61328, "rss_max_mib": 192.008},
+      "s_contexts_4": {"aggregate_fps": 267.637, "per_context_fps": 66.909, "gpu_mean_ms": 14.934, "gpu_p95_ms": 15.4922, "rss_max_mib": 206.363},
+      "m_contexts_2": {"aggregate_fps": 125.08, "per_context_fps": 62.54, "gpu_mean_ms": 15.9847, "gpu_p95_ms": 16.043, "rss_max_mib": 227.852},
+      "m_contexts_4": {"aggregate_fps": 130.201, "per_context_fps": 32.55, "gpu_mean_ms": 30.7091, "gpu_p95_ms": 31.6562, "rss_max_mib": 241.77}
+    },
+    "application_last_60_seconds": {
+      "s_int8": {"frames": 888, "fps": 14.7935, "inference_mean_ms": 5.3527, "inference_p95_ms": 5.4, "person_frames": 510, "fall_frames": 141, "payload_sha256": "552263f926fd6ec0879557215328ec4e814a98c0810621ea30ec272fb3140b68"},
+      "s_fp16": {"frames": 866, "fps": 14.4239, "inference_mean_ms": 7.6594, "inference_p95_ms": 7.72, "person_frames": 731, "fall_frames": 847, "payload_sha256": "156e2e4b43663cfd0824cb28d60ff5d97c69f37cb1a942f1baf078f142f8fba3"},
+      "m_int8": {"frames": 862, "fps": 14.3549, "inference_mean_ms": 9.9212, "inference_p95_ms": 9.98, "person_frames": 410, "fall_frames": 0, "payload_sha256": "9f804ea23c502574d27300c4f9c6623739b3940985290fc8f1d259c805df86a3"},
+      "m_fp16": {"frames": 843, "fps": 14.0394, "inference_mean_ms": 14.9412, "inference_p95_ms": 14.98, "person_frames": 836, "fall_frames": 843, "payload_sha256": "79275d38bab2344a3362311597173d38d3d3513ecab55d0c2d097c28b90d13e2"}
+    },
+    "application_image_id": "sha256:ae24d79286d80130892b95ff8b6135051c608e61397178f490a3b172d9b56276"
+  },
+  "orin_nx_super": {
+    "interference_control": {
+      "stopped_before_measurement": ["esk-jetson-rtsp-pub", "esk-jetson-rtsp-server"],
+      "other_non_test_containers_during_measurement": [],
+      "restored_after_measurement": ["esk-jetson-rtsp-pub", "esk-jetson-rtsp-server"]
+    },
+    "engine_hashes": {
+      "s_int8": "57105b37875b25edba897f26d6ae8dfd532cd08a9a34f5c0c118929bdb690215",
+      "s_fp16": "d46702ad9d51c4a8bd051981fc42a0b65643ca4a6d59f9150e70cbb86b4b936d",
+      "m_int8": "239946152ed09c99cc2a2be8671541000c7202755ecd77f7657d1c6105ae152a",
+      "m_fp16": "b70cb1e5bf28a18c7508648e42088ff9eabcb759f01e45adb64505de2ab58fa2"
+    },
+    "core_medians": {
+      "s_int8": {"fps": 299.606, "gpu_mean_ms": 3.33549, "gpu_p95_ms": 3.34375, "board_power_w": 23.473},
+      "s_fp16": {"fps": 192.367, "gpu_mean_ms": 5.19597, "gpu_p95_ms": 5.20312, "board_power_w": 28.277},
+      "m_int8": {"fps": 139.16, "gpu_mean_ms": 7.18305, "gpu_p95_ms": 7.20312, "board_power_w": 25.462},
+      "m_fp16": {"fps": 88.2629, "gpu_mean_ms": 11.3272, "gpu_p95_ms": 11.3516, "board_power_w": 30.649}
+    },
+    "int8_context_capacity": {
+      "s_contexts_2": {"aggregate_fps": 294.992, "per_context_fps": 147.496, "gpu_mean_ms": 6.77417, "gpu_p95_ms": 6.82812, "rss_max_mib": 200.043},
+      "s_contexts_4": {"aggregate_fps": 292.935, "per_context_fps": 73.234, "gpu_mean_ms": 13.6446, "gpu_p95_ms": 14.043, "rss_max_mib": 214.609},
+      "m_contexts_2": {"aggregate_fps": 138.836, "per_context_fps": 69.418, "gpu_mean_ms": 14.4008, "gpu_p95_ms": 14.4844, "rss_max_mib": 221.574},
+      "m_contexts_4": {"aggregate_fps": 143.92, "per_context_fps": 35.98, "gpu_mean_ms": 27.7649, "gpu_p95_ms": 28.8906, "rss_max_mib": 236.52}
+    },
+    "application_last_60_seconds": {
+      "s_int8": {"frames": 889, "fps": 14.8005, "inference_mean_ms": 4.8207, "inference_p95_ms": 4.86, "person_frames": 496, "fall_frames": 146, "payload_sha256": "22fea29e1d395635fee85f3b170263c8947da7ff0da1ee88c492707bf3e7cf47"},
+      "s_fp16": {"frames": 873, "fps": 14.5334, "inference_mean_ms": 6.8221, "inference_p95_ms": 6.87, "person_frames": 723, "fall_frames": 850, "payload_sha256": "858d280184a6b9d6b5398a06e44d23ba967f07f14496c905535bdeb0533d6afc"},
+      "m_int8": {"frames": 861, "fps": 14.3491, "inference_mean_ms": 8.8566, "inference_p95_ms": 8.9, "person_frames": 421, "fall_frames": 0, "payload_sha256": "4a637215cf5adbd064daa7c066ac0d0a75a3c58e7f6aad6f64892a6b97b77d99"},
+      "m_fp16": {"frames": 848, "fps": 14.1318, "inference_mean_ms": 13.1873, "inference_p95_ms": 13.27, "person_frames": 840, "fall_frames": 848, "payload_sha256": "591f7bee9d57adc4850b2ed432850a8bd489dc6fc1f93b899069c3c86be1ea44"}
+    },
+    "application_image_digest": "sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff"
+  },
+  "findings": {
+    "core_int8_speedup": {"nano_s": 1.57, "nano_m": 1.61, "nx_s": 1.56, "nx_m": 1.58},
+    "context_result": "Two and four TensorRT inference streams kept aggregate throughput near the one-stream result while dividing per-context FPS and increasing per-context latency.",
+    "output_sanity": "Every engine produced person detections on the real RTSP source.",
+    "accuracy_limitation": "INT8 and FP16 person/fall frame counts differ substantially, including zero M INT8 fall frames in the measured windows. Source phase and tracker state are uncontrolled, so these counts are neither an accuracy metric nor evidence of precision equivalence. A disjoint calibration set and frozen trace evaluation are required before publishing INT8 accuracy."
+  }
+}

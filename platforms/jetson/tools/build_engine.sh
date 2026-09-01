@@ -28,6 +28,7 @@ echo "Target:  Orin SM87 / host TensorRT 10.3"
 # profile by default; set TRT_INPUT_NAME or pass an explicit shape argument
 # when the exported graph uses a different name/profile.
 TRT_INPUT_NAME=${TRT_INPUT_NAME:-images}
+TRT_STATIC_SHAPE=${TRT_STATIC_SHAPE:-false}
 shape_args=()
 has_explicit_shapes=false
 for argument in "$@"; do
@@ -37,7 +38,11 @@ for argument in "$@"; do
       ;;
   esac
 done
-if [[ "$has_explicit_shapes" == false ]]; then
+if [[ "$TRT_STATIC_SHAPE" != true && "$TRT_STATIC_SHAPE" != false ]]; then
+  echo "TRT_STATIC_SHAPE must be true or false" >&2
+  exit 2
+fi
+if [[ "$has_explicit_shapes" == false && "$TRT_STATIC_SHAPE" == false ]]; then
   shape_args=(
     "--minShapes=${TRT_INPUT_NAME}:1x3x640x640"
     "--optShapes=${TRT_INPUT_NAME}:1x3x640x640"
@@ -53,7 +58,7 @@ trtexec_args=(
   "--builderOptimizationLevel=3"
   "--timingCacheFile=${ENGINE_PATH}.timing.cache"
 )
-if [[ "$has_explicit_shapes" == false ]]; then
+if [[ "$has_explicit_shapes" == false && "$TRT_STATIC_SHAPE" == false ]]; then
   trtexec_args+=("${shape_args[@]}")
 fi
 trtexec_args+=("$@")

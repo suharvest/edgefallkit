@@ -14,6 +14,9 @@ THROUGHPUT_RE = re.compile(r"Throughput: ([0-9.]+) qps")
 LATENCY_RE = re.compile(
     r"Latency: .*?mean = ([0-9.]+) ms,.*?percentile\(95%\) = ([0-9.]+) ms"
 )
+GPU_COMPUTE_RE = re.compile(
+    r"GPU Compute Time: .*?mean = ([0-9.]+) ms,.*?percentile\(95%\) = ([0-9.]+) ms"
+)
 RAM_RE = re.compile(r"RAM (\d+)/(\d+)MB")
 CPU_RE = re.compile(r"CPU \[([^]]+)]")
 GPU_RE = re.compile(r"GR3D_FREQ (\d+)%")
@@ -29,7 +32,8 @@ def summarize_run(run_dir: Path) -> dict[str, object]:
     log = (run_dir / "trtexec.log").read_text(errors="replace")
     throughput_match = THROUGHPUT_RE.search(log)
     latency_match = LATENCY_RE.search(log)
-    if throughput_match is None or latency_match is None:
+    gpu_compute_match = GPU_COMPUTE_RE.search(log)
+    if throughput_match is None or latency_match is None or gpu_compute_match is None:
         raise ValueError(f"missing TensorRT metrics in {run_dir}")
 
     ram: list[float] = []
@@ -69,6 +73,8 @@ def summarize_run(run_dir: Path) -> dict[str, object]:
         "per_context_fps": round(throughput / contexts, 3),
         "latency_mean_ms": float(latency_match.group(1)),
         "latency_p95_ms": float(latency_match.group(2)),
+        "gpu_compute_mean_ms": float(gpu_compute_match.group(1)),
+        "gpu_compute_p95_ms": float(gpu_compute_match.group(2)),
         "process_rss_mib_mean": None if not rss_kib else round(statistics.fmean(rss_kib) / 1024, 3),
         "process_rss_mib_max": None if not rss_kib else round(max(rss_kib) / 1024, 3),
         "process_cpu_percent_mean": mean(process_cpu),

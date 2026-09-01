@@ -59,24 +59,28 @@ Hailo S batch 8 的持续吞吐为 320.64 FPS，未高于 batch 1。
 32.30–37.86 ms P95（`appsink_enqueue_to_hailort_completion`）。两条 Hailo
 pipeline 的起点不同，不相互排名。结构化 Hailo 证据见
 [`reports/rpi-hailo8-aligned-20260901.json`](reports/rpi-hailo8-aligned-20260901.json)。
-INT8 应用测试只证明真实人物帧能产生有效输出，不是精度等价评测；校准候选包含
-Subject 4，因此这些引擎不能用于刷新冻结 S4 Accuracy/F1。新增的
-`yolov8-int8-pose` 使用 S/M INT8 的 Subjects 1–2 traces 训练、Subject 3 选参、
-Subjects 1–3 重拟合，再只读 27 段 clean Subject 4。完整部署评测如下；因 engine
-校准集仍含 S4，只记为工程验证，不并入下方冻结准确率主表。
+2026-09-01 INT8 应用测试只证明真实人物帧能产生有效输出，不是精度等价评测；
+其 64 张校准候选包含 Subject 4。2026-09-02 的 M 修复另用 494 张 phase-balanced
+Subjects 1–3 图像，Subject 4 图像数为 0。修复前后完整部署评测如下：
 
 | 设备/前端 | Temporal gate TP/FN/TN/FP / F1 | Deployed TP/FN/TN/FP / F1 | Pose coverage | Application inference mean |
 |---|---|---|---:|---:|
 | Orin Nano / YOLOv8s INT8 | 9/3/13/2 / 78.3% | 7/5/13/2 / 66.7% | 78.3% | 5.28 ms |
 | Orin NX / YOLOv8s INT8 | 9/3/13/2 / 78.3% | 7/5/13/2 / 66.7% | 78.3% | 4.72 ms |
-| Orin Nano / YOLOv8m INT8 | 4/8/12/3 / 42.1% | 0/12/12/3 / 0.0% | 64.7% | 9.87 ms |
-| Orin NX / YOLOv8m INT8 | 5/7/12/3 / 50.0% | 0/12/12/3 / 0.0% | 64.5% | 8.80 ms |
+| Orin Nano / YOLOv8m full INT8 baseline | 4/8/12/3 / 42.1% | 0/12/12/3 / 0.0% | 64.7% | 9.87 ms |
+| Orin NX / YOLOv8m full INT8 baseline | 5/7/12/3 / 50.0% | 0/12/12/3 / 0.0% | 64.5% | 8.80 ms |
+| Orin Nano / YOLOv8m mixed INT8/FP16 | 9/3/14/1 / 81.8% | 10/2/14/1 / **87.0%** | **94.5%** | 12.84 ms |
+| Orin NX / YOLOv8m mixed INT8/FP16 | 9/3/14/1 / 81.8% | 10/2/14/1 / **87.0%** | **94.5%** | 11.31 ms |
 
-M 的限制出现在 pose frontend：Subject 4 Fall/03、Fall/04、Fall/08 的 coverage
-由 S 的 76.0%/54.9%/57.4% 降至 M 的 23.0%/7.0%/42.6%。时序模型无法恢复
-已被前端阈值拒绝的姿态帧。若要发布 INT8 准确率，仍需使用不含 S4 的校准集重建
-engine 后重跑。完整 Jetson 性能证据见
-[`reports/jetson-yolov8-crossprecision-20260901.json`](reports/jetson-yolov8-crossprecision-20260901.json)。
+诊断分三步：仅把 Pose `cv4` 分支固定 FP16，S3 coverage 为 72.3%；把完整
+`model.22` head 固定 FP16，coverage 仍为 72.1%；把 neck + head
+`model.10–22` 的 204 个浮点层固定 FP16 后，coverage 恢复到 94.7%。因此丢失已在
+进入 head 前的量化 neck 特征图中发生，不能靠降低检测阈值或只重训 temporal
+恢复。最终 temporal 同时使用 S INT8 与 mixed M 的 Subjects 1–3 traces，按最差
+frontend F1 选参。两台 Orin 独立构建 engine，S4 分类结果一致。由于早期失败调查
+已经观察过 Subject 4，这组 27-clip 数据属于回归证据，不表述为 pristine one-shot
+holdout。完整证据见
+[`reports/jetson-yolov8m-mixed-20260902.json`](reports/jetson-yolov8m-mixed-20260902.json)。
 
 本轮未刷新 RK3576/RK3588，按测试计划后置。`recamera-pro-test` 多次停在 SSH
 handshake timeout，因此 reCamera Pro 只保留既有现场数据，不填入新的 YOLOv8

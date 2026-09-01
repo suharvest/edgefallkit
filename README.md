@@ -111,8 +111,8 @@ Python GI bridge; the exact migration boundary is documented in
 
 ## Measured results
 
-All figures below are frozen evidence collected on 2026-08-13, 2026-08-20,
-2026-08-30, and 2026-09-01. Different models and latency scopes are shown
+All figures below are evidence collected on 2026-08-13, 2026-08-20,
+2026-08-30, 2026-09-01, and 2026-09-02. Different models and latency scopes are shown
 explicitly; see the
 [full results ledger](evaluation/RESULTS.md) before making a capacity or
 accuracy claim.
@@ -188,16 +188,17 @@ applications were stopped on each device before measurement.
 | Pi 5 + Hailo-8 | YOLOv8s-Pose quantized HEF, 1 compiled context | 326.33 HW-only | 6.93 ms | N/A |
 | Pi 5 + Hailo-8 | YOLOv8m-Pose quantized HEF, 3 compiled contexts | 31.00 HW-only | 26.89 ms | N/A |
 
-Jetson INT8 uses an entropy calibrator and the same 64 GMDCSA image contents on
-both Orins; the previous uncalibrated TensorRT INT8 timing is excluded. Real
+The Jetson INT8 rows in this 2026-09-01 accelerator-only table use an entropy
+calibrator and the same 64 GMDCSA image contents on both Orins; the previous
+uncalibrated TensorRT INT8 timing is excluded. Real
 RTSP person frames were also tested to reject timing-only engines with unusable
 outputs. This is a performance and runtime sanity comparison, not INT8
 accuracy equivalence: the calibration candidates include Subject 4, so these
 engines cannot refresh the frozen S4 accuracy table. INT8 and FP16 fall-state
 counts also differed substantially in the RTSP windows. A frontend-specific
-INT8 temporal profile and frozen trace/deployed evaluation have now been run;
-the results are reported below as engineering validation. A disjoint
-calibration set is still required before publishing INT8 accuracy.
+INT8 temporal profile and trace/deployed evaluation were also run. The repaired
+M engine and its disjoint 494-image calibration set are reported separately
+below; its application timing must not replace these GPU-only measurements.
 The complete core, context, application and artifact records are in the
 [structured Jetson report](evaluation/reports/jetson-yolov8-crossprecision-20260901.json).
 
@@ -207,30 +208,35 @@ divided by eight and relabeled as single-frame latency. The S HEF did not gain
 sustained throughput from batch 8. See the
 [structured Hailo report](evaluation/reports/rpi-hailo8-aligned-20260901.json).
 
-### Jetson INT8 engineering validation
+### Jetson INT8 and mixed-precision validation
 
-`temporal_profile=auto` selects the embedded `yolov8-int8-pose` profile when
-the engine filename contains both `yolov8` and `int8`. The profile was fit on
-S/M INT8 Subjects 1–2, selected on Subject 3, refit on Subjects 1–3, then read
-only against the 27 clean Subject 4 clips. Other GPU applications were stopped
-on both Orins. These rows are not added to the frozen accuracy table because
-the existing engine calibration image candidates include Subject 4.
+`temporal_profile=auto` selects independent YOLOv8s and YOLOv8m profiles from
+the engine filename. The original M engine allowed the complete graph to use
+INT8 and lost pose spans after a person fell: deployed F1 was 0% and coverage
+was 64.5% on NX and 64.7% on Nano. More calibration images and an FP16 Pose-only
+head did not repair those spans.
 
-| Device / frontend | Temporal gate F1 | Deployed-state F1 | Pose coverage | Application inference |
-|---|---:|---:|---:|---:|
-| Orin Nano Super / YOLOv8s INT8 | 78.3% | 66.7% | 78.3% | 5.28 ms mean |
-| Orin NX Super / YOLOv8s INT8 | 78.3% | 66.7% | 78.3% | 4.72 ms mean |
-| Orin Nano Super / YOLOv8m INT8 | 42.1% | 0.0% | 64.7% | 9.87 ms mean |
-| Orin NX Super / YOLOv8m INT8 | 50.0% | 0.0% | 64.5% | 8.80 ms mean |
+The repaired M engine uses 494 phase-balanced calibration images from Subjects
+1–3, with no Subject 4 images. TensorRT may use INT8 for backbone `model.0–9`;
+floating-point neck, Detect and Pose layers in `model.10–22` are constrained to
+FP16. The M temporal weights are fit on Subjects 1–2 using S INT8 and repaired M
+traces, selected on Subject 3 by worst-frontend F1, then refit on Subjects 1–3.
+Other GPU applications were stopped during both device runs.
 
-The M frontend loses long pose spans in several fall clips; for example,
-Subject 4 Fall/04 coverage falls from 54.9% with S to 7.0% with M. Retraining
-the temporal layer cannot reconstruct frames rejected by the pose frontend.
-Per-clip evidence is stored in the
-[Nano S](platforms/jetson/evaluation/eval-nano-s-int8.json),
-[Nano M](platforms/jetson/evaluation/eval-nano-m-int8.json),
-[NX S](platforms/jetson/evaluation/eval-nx-s-int8.json), and
-[NX M](platforms/jetson/evaluation/eval-nx-m-int8.json) reports.
+| Device / frontend | Temporal TP/FN/TN/FP, F1 | Deployed TP/FN/TN/FP, F1 | Pose coverage | Application inference |
+|---|---|---|---:|---:|
+| Orin Nano Super / YOLOv8s INT8 | 9/3/13/2, 78.3% | 7/5/13/2, 66.7% | 78.3% | 5.28 ms mean |
+| Orin NX Super / YOLOv8s INT8 | 9/3/13/2, 78.3% | 7/5/13/2, 66.7% | 78.3% | 4.72 ms mean |
+| Orin Nano Super / YOLOv8m mixed INT8/FP16 | 9/3/14/1, 81.8% | 10/2/14/1, 87.0% | 94.5% | 12.84 ms mean |
+| Orin NX Super / YOLOv8m mixed INT8/FP16 | 9/3/14/1, 81.8% | 10/2/14/1, 87.0% | 94.5% | 11.31 ms mean |
+
+The mixed M interval includes preprocess, copies, TensorRT, output copy and
+pose parsing; it is not substituted into the GPU-only table above. Calibration
+and fitting exclude Subject 4, but earlier failed M investigations had already
+observed that subject, so this is regression evidence rather than a pristine
+one-shot publication holdout. Build hashes, precision boundaries and raw
+reports are in the
+[structured repair report](evaluation/reports/jetson-yolov8m-mixed-20260902.json).
 
 ### Frozen GMDCSA Subject 4
 

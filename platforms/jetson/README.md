@@ -186,6 +186,26 @@ python3 tools/build_calibrated_int8.py \
   --engine models/yolov8s-pose.int8.engine
 ```
 
+YOLOv8m requires a mixed precision boundary for detection-valid fall output.
+Keep the backbone INT8-eligible and constrain the PAN/FPN neck plus
+Detect/Pose head to FP16:
+
+```bash
+for layer in $(seq 10 22); do
+  precision_args+=(--fp16-layer-prefix "/model.${layer}/")
+done
+python3 tools/build_calibrated_int8.py \
+  --onnx models/yolov8m-pose.onnx \
+  --manifest /data/calib-yolov8m/calibration.txt \
+  --cache models/yolov8m-pose.int8.cache \
+  --engine models/yolov8m-pose.mixed.engine \
+  "${precision_args[@]}"
+```
+
+The loop is for Linux bash on the Jetson. The builder enables
+`OBEY_PRECISION_CONSTRAINTS`, constrains only floating-point layers and leaves
+shape/index layers at their required integer types.
+
 The builder uses centered 640-square letterbox preprocessing, RGB order and
 `float32 / 255`, then enables INT8 with FP16 fallback for layers without an
 INT8 implementation. Keep separate cache files for different ONNX graphs.
@@ -212,29 +232,35 @@ device/model/precision combinations. INT8 and FP16 fall-state counts differed,
 including zero M INT8 fall-state frames in the measured windows; this smoke
 test is not an accuracy equivalence result.
 
-The embedded `yolov8-int8-pose` temporal profile was subsequently fit with S/M
-INT8 Subjects 1–2 traces, selected on Subject 3, refit on Subjects 1–3, and
-evaluated without using Subject 4 for selection. The 27-clip deployed evaluator
-produced the following idle-device results:
+The original profiles were fit with S/M INT8 Subjects 1–2 traces, selected on
+Subject 3 and refit on Subjects 1–3. They exposed an M frontend failure rather
+than a throughput limit:
 
 | Device / frontend | Temporal gate TP/FN/TN/FP, F1 | Deployed TP/FN/TN/FP, F1 | Pose coverage | Mean inference |
 |---|---|---|---:|---:|
 | Orin Nano Super / YOLOv8s INT8 | 9/3/13/2, 78.3% | 7/5/13/2, 66.7% | 78.3% | 5.28 ms |
 | Orin NX Super / YOLOv8s INT8 | 9/3/13/2, 78.3% | 7/5/13/2, 66.7% | 78.3% | 4.72 ms |
-| Orin Nano Super / YOLOv8m INT8 | 4/8/12/3, 42.1% | 0/12/12/3, 0.0% | 64.7% | 9.87 ms |
-| Orin NX Super / YOLOv8m INT8 | 5/7/12/3, 50.0% | 0/12/12/3, 0.0% | 64.5% | 8.80 ms |
+| Orin Nano Super / YOLOv8m full INT8 baseline | 4/8/12/3, 42.1% | 0/12/12/3, 0.0% | 64.7% | 9.87 ms |
+| Orin NX Super / YOLOv8m full INT8 baseline | 5/7/12/3, 50.0% | 0/12/12/3, 0.0% | 64.5% | 8.80 ms |
+| Orin Nano Super / YOLOv8m mixed INT8/FP16 | 9/3/14/1, 81.8% | 10/2/14/1, 87.0% | 94.5% | 12.84 ms |
+| Orin NX Super / YOLOv8m mixed INT8/FP16 | 9/3/14/1, 81.8% | 10/2/14/1, 87.0% | 94.5% | 11.31 ms |
 
-The M result is bounded by frontend coverage rather than Orin throughput.
-Subject 4 Fall/03, Fall/04 and Fall/08 pose coverage changed from
-76.0%/54.9%/57.4% with S to 23.0%/7.0%/42.6% with M. The existing calibration
-candidates include Subject 4, so this table is engineering validation and does
-not replace the publication-grade frozen accuracy table. See the
+The full-INT8 M result was bounded by frontend coverage: forcing only the Pose
+branch or complete `model.22` head to FP16 left overall development coverage
+near 72%. Constraining `model.10–22` restored development coverage to 94.7%,
+which locates the loss in the quantized neck feature maps. The repaired engine
+uses 494 phase-balanced calibration images from Subjects 1–3 and no Subject 4
+images. Earlier failed investigations had already observed Subject 4, so the
+27-clip result is regression evidence rather than a pristine one-shot holdout.
+See the
 [development report](evaluation/temporal-yolov8-int8-development.json) and the
 [Nano S](evaluation/eval-nano-s-int8.json),
 [Nano M](evaluation/eval-nano-m-int8.json),
 [NX S](evaluation/eval-nx-s-int8.json), and
 [NX M](evaluation/eval-nx-m-int8.json) deployed reports. See also the
 [structured cross-precision report](../../evaluation/reports/jetson-yolov8-crossprecision-20260901.json).
+Mixed-engine build hashes, precision boundaries and current raw reports are in
+the [repair report](../../evaluation/reports/jetson-yolov8m-mixed-20260902.json).
 
 `tools/build_engine.sh` assumes dynamic input shapes. For an ONNX graph already
 fixed at `1x3x640x640`, set `TRT_STATIC_SHAPE=true` so the script does not pass

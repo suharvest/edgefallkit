@@ -1,0 +1,63 @@
+{
+  "date": "2026-09-02",
+  "scope": "YOLOv8m-Pose calibrated mixed-precision repair on Jetson Orin NX and Nano Super",
+  "precision_boundary": {
+    "int8_eligible": "Ultralytics model.0 through model.9 backbone",
+    "forced_fp16": "model.10 through model.22 neck, Detect and Pose floating-point layers",
+    "forced_fp16_layer_count": 204,
+    "integer_shape_layers": "retained as INT32/INT64",
+    "builder_flag": "OBEY_PRECISION_CONSTRAINTS"
+  },
+  "calibration": {
+    "subjects": [1, 2, 3],
+    "subject4_images": 0,
+    "images": 494,
+    "sampling": "ADL two frames; falls include pre-onset plus five phase samples",
+    "manifest_sha256": "5e899f173a8d796fa21f611234ff0a38caa0c8b79387e67664c4cb1d234f5ab4",
+    "image_hash_list_sha256": "89aba9b073b5d53e9a015fb88d896e980b2eb5fa6cdd760fb520ae9528dc28b7"
+  },
+  "temporal_training": {
+    "training_subjects": [1, 2],
+    "selection_subject": 3,
+    "refit_subjects": [1, 2, 3],
+    "frontends": ["YOLOv8s calibrated INT8", "YOLOv8m mixed INT8/FP16"],
+    "selection_rule": "maximize the worst Subject-3 frontend F1",
+    "variant": "all",
+    "hidden": 32,
+    "alpha": 0.01,
+    "threshold": 0.8,
+    "consecutive": 3,
+    "subject3_m_f1": 0.909090909090909,
+    "subject3_s_f1": 0.8936170212765957,
+    "weights_sha256": "40989984ca13d589e27657c2b5d3a21128e7c06897e4b783fbdaa5248b98d597"
+  },
+  "orin_nx_super": {
+    "engine_bytes": 45903308,
+    "engine_sha256": "dd8ba259f11308a904686d59cf3c5308b669cfcefc647ca9ddf0715f906ed3ba",
+    "engine_build_seconds": 513.625,
+    "mean_application_inference_ms": 11.306482954560337,
+    "pose_coverage": 0.9445794969927567,
+    "temporal_gate": {"tp": 9, "fn": 3, "tn": 14, "fp": 1, "f1": 0.8181818181818182},
+    "deployed_alert": {"tp": 10, "fn": 2, "tn": 14, "fp": 1, "f1": 0.8695652173913043}
+  },
+  "orin_nano_super": {
+    "engine_bytes": 45836204,
+    "engine_sha256": "9c25da705ea43320ec21434fcb7dc762d8530dc65024df8e46bc3e7749deb5a4",
+    "engine_build_seconds": 569.108,
+    "mean_application_inference_ms": 12.841590972789717,
+    "pose_coverage": 0.9445794969927567,
+    "temporal_gate": {"tp": 9, "fn": 3, "tn": 14, "fp": 1, "f1": 0.8181818181818182},
+    "deployed_alert": {"tp": 10, "fn": 2, "tn": 14, "fp": 1, "f1": 0.8695652173913043}
+  },
+  "comparison": {
+    "old_m_int8_pose_coverage": {"nx": 0.645, "nano": 0.647},
+    "old_m_int8_deployed_f1": {"nx": 0.0, "nano": 0.0},
+    "diagnosis": "forcing only Pose or the complete model.22 head to FP16 left fall coverage near 72%; the quantization loss was already present in neck feature maps"
+  },
+  "protocol_note": "Calibration and fitting exclude Subject 4. Subject 4 had been observed during earlier failed INT8 investigations, so the 27-clip result is regression evidence rather than a pristine one-shot publication holdout.",
+  "raw_reports": [
+    "temporal-yolov8m-mixed-development-20260902.json",
+    "jetson-nx-yolov8m-mixed-s4-20260902.json",
+    "jetson-nano-yolov8m-mixed-s4-20260902.json"
+  ]
+}

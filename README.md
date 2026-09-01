@@ -112,24 +112,26 @@ Python GI bridge; the exact migration boundary is documented in
 ## Measured results
 
 All figures below are frozen evidence collected on 2026-08-13, 2026-08-20,
-and 2026-08-30. Different models and latency scopes are shown explicitly; see the
+2026-08-30, and 2026-09-01. Different models and latency scopes are shown
+explicitly; see the
 [full results ledger](evaluation/RESULTS.md) before making a capacity or
 accuracy claim.
 
 ### Production RTSP path
 
-| Device | Pose frontend | Highest tested live/RTSP load | Inference or probe timing | Next boundary / coverage |
-|---|---|---:|---:|---:|
-| Orin Nano Super | YOLO11s-Pose TRT FP16 | 8 streams: 14.95 FPS each | 6.44 ms `trtexec` core mean | 9 streams failed at 13.36 FPS each |
-| Orin NX Super | YOLO11s-Pose TRT FP16 | 9 streams: 14.93 FPS each | 5.75 ms `trtexec` core mean | 10 streams failed at 13.05 FPS each |
-| RK3576 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.90 FPS | 65.74 ms pipeline P95 | Higher RTSP stream counts not tested |
-| RK3588 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.67 FPS | 83.20 ms pipeline P95 | Higher RTSP stream counts not tested |
-| Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8, single context | 16 streams: 14.52–14.57 FPS each | 36.16–40.93 ms mean pipeline | 17 streams failed the 14.5 FPS threshold |
-| Pi 5 + Hailo-8 | YOLOv8m-Pose HEF INT8, 3 contexts | 5 streams: 14.98–15.02 FPS each | 71.08 ms HW / batch 8 | 6 streams failed the 14.5 FPS threshold |
-| reCamera Pro | YOLO11n-Pose RKNN INT8 | 1 live camera: 13.05 FPS WebSocket | 39.36 ms infer / 85.99 ms pipeline P95 | Higher live loads not tested; 14.5 FPS SLA not met |
+| Device | Pose frontend | Highest tested live/RTSP load | Next boundary / coverage |
+|---|---|---:|---:|
+| Orin Nano Super | YOLO11s-Pose TRT FP16 | 8 streams: 14.95 FPS each | 9 streams failed at 13.36 FPS each |
+| Orin NX Super | YOLO11s-Pose TRT FP16 | 9 streams: 14.93 FPS each | 10 streams failed at 13.05 FPS each |
+| RK3576 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.90 FPS | Higher RTSP stream counts not tested |
+| RK3588 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.67 FPS | Higher RTSP stream counts not tested |
+| Pi 5 + Hailo-8 | YOLOv8s-Pose quantized HEF, single context | 16 streams: 14.52–14.57 FPS each | 17 streams failed the 14.5 FPS threshold |
+| Pi 5 + Hailo-8 | YOLOv8m-Pose quantized HEF, 3 contexts | 5 streams: 14.98–15.02 FPS each | 6 streams failed the 14.5 FPS threshold |
+| reCamera Pro | YOLO11n-Pose RKNN INT8 | 1 live camera: 13.05 FPS WebSocket | Higher live loads not tested; 14.5 FPS SLA not met |
 
-The 15 FPS rows are source-rate SLA checks, not a hardware ranking. Timing
-boundaries and known risks are documented in the
+The 15 FPS rows are source-rate SLA checks, not a hardware ranking. They do not
+mix accelerator, application-inference, pipeline, or output-interval timing in
+one column. Timing boundaries and known risks are documented in the
 [performance fairness audit](evaluation/PERFORMANCE_FAIRNESS.md).
 The Hailo S/M capacity boundaries were measured with MQTT publishing disabled;
 the rc3 image was separately smoke-tested with MQTT enabled for one S stream
@@ -140,6 +142,68 @@ modules; they do not establish YOLO11m multi-stream capacity. Earlier Jetson
 `--infStreams` runs and RK multi-context runs are accelerator-only evidence,
 not RTSP route-count verification. A single tested reCamera Pro source is test
 coverage, not a measured maximum.
+
+### Named application timing
+
+These intervals are useful within one platform but do not share the same start
+and end markers. `N/A` means the runtime does not instrument that interval.
+
+| Device / model | Output cadence | Application inference | Named pipeline interval |
+|---|---:|---:|---:|
+| Orin Nano Super / YOLOv8s calibrated INT8 | 14.79 FPS | 5.35 / 5.40 ms mean/P95 | N/A |
+| Orin Nano Super / YOLOv8s FP16 | 14.42 FPS | 7.66 / 7.72 ms mean/P95 | N/A |
+| Orin Nano Super / YOLOv8m calibrated INT8 | 14.35 FPS | 9.92 / 9.98 ms mean/P95 | N/A |
+| Orin Nano Super / YOLOv8m FP16 | 14.04 FPS | 14.94 / 14.98 ms mean/P95 | N/A |
+| Orin NX Super / YOLOv8s calibrated INT8 | 14.80 FPS | 4.82 / 4.86 ms mean/P95 | N/A |
+| Orin NX Super / YOLOv8s FP16 | 14.53 FPS | 6.82 / 6.87 ms mean/P95 | N/A |
+| Orin NX Super / YOLOv8m calibrated INT8 | 14.35 FPS | 8.86 / 8.90 ms mean/P95 | N/A |
+| Orin NX Super / YOLOv8m FP16 | 14.13 FPS | 13.19 / 13.27 ms mean/P95 | N/A |
+| Pi 5 + Hailo-8 / YOLOv8s | 15.00–15.06 FPS | N/A | 7.47–7.51 ms mean; 7.99–8.10 ms P95, `pre_hailonet_to_hailonet_src` |
+| Pi 5 + Hailo-8 / YOLOv8m | 14.12–14.16 FPS | N/A | 28.52–28.89 ms mean; 32.30–37.86 ms P95, `appsink_enqueue_to_hailort_completion` |
+| reCamera Pro / YOLO11n | 13.05 FPS WebSocket | 35.89 / 39.36 ms mean/P95 | 77.80 / 85.99 ms mean/P95, Pro application scope |
+
+Jetson's application interval includes preprocess, copies, TensorRT, output
+copy and pose parsing. Hailo's two probes have different start markers and are
+not substituted for `inference_time_ms`. Accelerator-only results for the
+aligned YOLOv8 S/M comparison are reported separately below and in the
+[results ledger](evaluation/RESULTS.md).
+
+### Aligned accelerator-only YOLOv8 comparison
+
+All rows use 640-square input, batch 1, one runtime inference stream, 30 seconds
+warm-up and 120 seconds × 3; values are medians. TensorRT rows report GPU
+compute time. Hailo rows report HailoRT hardware latency. Other inference
+applications were stopped on each device before measurement.
+
+| Device | Model / executable precision | Aggregate FPS | Accelerator mean | P95 |
+|---|---|---:|---:|---:|
+| Orin Nano Super | YOLOv8s-Pose calibrated INT8 + FP16 fallback | 266.34 | 3.75 ms | 3.76 ms |
+| Orin Nano Super | YOLOv8s-Pose FP16 | 169.66 | 5.89 ms | 5.91 ms |
+| Orin Nano Super | YOLOv8m-Pose calibrated INT8 + FP16 fallback | 123.22 | 8.11 ms | 8.14 ms |
+| Orin Nano Super | YOLOv8m-Pose FP16 | 76.64 | 13.05 ms | 13.32 ms |
+| Orin NX Super | YOLOv8s-Pose calibrated INT8 + FP16 fallback | 299.61 | 3.34 ms | 3.34 ms |
+| Orin NX Super | YOLOv8s-Pose FP16 | 192.37 | 5.20 ms | 5.20 ms |
+| Orin NX Super | YOLOv8m-Pose calibrated INT8 + FP16 fallback | 139.16 | 7.18 ms | 7.20 ms |
+| Orin NX Super | YOLOv8m-Pose FP16 | 88.26 | 11.33 ms | 11.35 ms |
+| Pi 5 + Hailo-8 | YOLOv8s-Pose quantized HEF, 1 compiled context | 326.33 HW-only | 6.93 ms | N/A |
+| Pi 5 + Hailo-8 | YOLOv8m-Pose quantized HEF, 3 compiled contexts | 31.00 HW-only | 26.89 ms | N/A |
+
+Jetson INT8 uses an entropy calibrator and the same 64 GMDCSA image contents on
+both Orins; the previous uncalibrated TensorRT INT8 timing is excluded. Real
+RTSP person frames were also tested to reject timing-only engines with unusable
+outputs. This is a performance and runtime sanity comparison, not INT8
+accuracy equivalence: the calibration candidates include Subject 4, so these
+engines cannot refresh the frozen S4 accuracy table. INT8 and FP16 fall-state
+counts also differed substantially in the RTSP windows; a disjoint calibration
+set and frozen trace evaluation are required before publishing INT8 accuracy.
+The complete core, context, application and artifact records are in the
+[structured Jetson report](evaluation/reports/jetson-yolov8-crossprecision-20260901.json).
+
+Hailo-8 HEFs do not expose a runtime FP16 mode. Batch 8 raises M aggregate
+throughput to 88.46 FPS at 70.10 ms for the complete batch; that latency is not
+divided by eight and relabeled as single-frame latency. The S HEF did not gain
+sustained throughput from batch 8. See the
+[structured Hailo report](evaluation/reports/rpi-hailo8-aligned-20260901.json).
 
 ### Frozen GMDCSA Subject 4
 

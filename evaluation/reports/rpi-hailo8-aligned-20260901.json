@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-01",
+  "device": "Raspberry Pi 5 + Hailo-8",
+  "runtime": "HailoRT 4.21",
+  "conditions": {
+    "power_mode": "ultra_performance",
+    "other_inference_containers_stopped": true,
+    "duration_seconds": 120,
+    "repetitions": 3,
+    "application_warmup_seconds": 30,
+    "source": "Spark LAN fall-person, H.264 Constrained Baseline 640x640@15"
+  },
+  "models": {
+    "s": {
+      "name": "YOLOv8s-Pose",
+      "precision": "quantized HEF; UINT8 input, UINT8/UINT16 outputs",
+      "contexts": 1,
+      "sha256": "e19856699ed47cf866d23265827f960b263f287dab5e54e82c7ce37e12525a2d"
+    },
+    "m": {
+      "name": "YOLOv8m-Pose",
+      "precision": "quantized HEF; UINT8 input, UINT8/UINT16 outputs",
+      "contexts": 3,
+      "sha256": "fa0bfbf83dba494f4d75ec2fd0ef497ca9d402a65c324afc9865ffc327a53514"
+    }
+  },
+  "accelerator_only": {
+    "metric": "hailortcli benchmark",
+    "s_batch_1": {
+      "hw_only_fps_repetitions": [335.245, 326.328, 325.604],
+      "streaming_fps_repetitions": [298.472, 295.606, 302.172],
+      "hw_latency_ms_repetitions": [6.93426, 6.92854, 6.93058],
+      "median_hw_only_fps": 326.328,
+      "median_streaming_fps": 298.472,
+      "median_hw_latency_ms": 6.93058
+    },
+    "s_batch_8": {
+      "hw_only_fps_repetitions": [325.678, 308.013, 320.64],
+      "streaming_fps_repetitions": [298.472, 298.889, 311.063],
+      "hw_latency_ms_repetitions": [8.43998, 8.42636, 8.43248],
+      "median_hw_only_fps": 320.64,
+      "median_streaming_fps": 298.889,
+      "median_hw_latency_ms_per_batch": 8.43248
+    },
+    "m_batch_1": {
+      "hw_only_fps_repetitions": [31.0, 30.9999, 31.0],
+      "streaming_fps_repetitions": [31.0, 31.0, 31.0],
+      "hw_latency_ms_repetitions": [26.891, 26.8911, 26.8915],
+      "median_hw_only_fps": 31.0,
+      "median_streaming_fps": 31.0,
+      "median_hw_latency_ms": 26.8911
+    },
+    "m_batch_8": {
+      "hw_only_fps_repetitions": [88.4619, 88.4621, 88.4621],
+      "streaming_fps_repetitions": [88.4618, 88.4423, 87.5723],
+      "hw_latency_ms_repetitions": [70.0959, 70.0965, 70.994],
+      "median_hw_only_fps": 88.4621,
+      "median_streaming_fps": 88.4423,
+      "median_hw_latency_ms_per_batch": 70.0965
+    },
+    "thermal_observation": "S began near 394 FPS, then the health monitor reported about 104 C and reduced the Hailo clock from 400 to 350 and 300 MHz. The earlier 15-second 393.3 FPS result is a short-run peak."
+  },
+  "single_route_application": {
+    "s": {
+      "output_fps_repetitions": [15.059, 15.0501, 15.001],
+      "pipeline_mean_ms_repetitions": [7.4869, 7.4681, 7.5067],
+      "pipeline_p95_ms_repetitions": [7.9869, 7.991, 8.0991],
+      "latency_metric": "pre_hailonet_to_hailonet_src",
+      "inference_time_metric": "unavailable"
+    },
+    "m": {
+      "output_fps_repetitions": [14.1597, 14.1284, 14.1202],
+      "pipeline_mean_ms_repetitions": [28.8883, 28.5248, 28.6201],
+      "pipeline_p95_ms_repetitions": [37.8572, 32.3005, 33.0745],
+      "latency_metric": "appsink_enqueue_to_hailort_completion",
+      "inference_time_metric": "unavailable"
+    },
+    "comparison_warning": "S and M application timing uses different start markers. Compare accelerator-only HailoRT rows for hardware ranking."
+  },
+  "batch_finding": "Batch 8 did not improve sustained S throughput. It increased M aggregate HW-only throughput 2.85x while increasing complete-batch latency from 26.89 to 70.10 ms.",
+  "precision_limitation": "A Hailo-8 HEF has no runtime FP16 alternative. FP16 must be measured on a platform whose accelerator supports it; Hailo rows remain explicitly quantized.",
+  "service_restore": "All containers stopped for the maintenance window were restarted; mcp_face_rec, mcp_warehouse, missionpack-industrial-gateway, xiaozhi db/redis/web and mcp-endpoint-server were healthy on final verification."
+}

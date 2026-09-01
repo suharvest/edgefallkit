@@ -1,6 +1,6 @@
 # 摔倒检测成果与对比台账
 
-更新日期：2026-08-30
+更新日期：2026-09-01
 
 本文件记录可横向比较的冻结结果。开发集成绩、最终测试成绩和外部测试
 严格分开；除非表格明确注明，否则不要把开发集数字作为产品准确率。
@@ -24,9 +24,56 @@
 | RK3588 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成（含既有 NPU 负载） | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 | Raspberry Pi + Hailo-8 | HailoRT/GStreamer | 已有 | 已实现，fixture + 2,602 条 RTSP 实时消息 | 已完成 synthetic、RTSP 单/双路、S 16 路/M 5 路最大路数与有人跌倒正向链路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 
-## 统一性能表
+## 2026-09-01 对齐的 YOLOv8 S/M 性能口径
 
-最终行必须同时记录设备、功耗模式、模型与量化、输入、并发路数、纯推理延迟、
+本表只放 accelerator-only 指标：Jetson 使用 TensorRT `GPU Compute Time`，
+Hailo 使用 HailoRT `Latency (hw)`。模型均为 640²、batch 1、单个运行时
+inference stream；每项 warm-up 30 秒、测量 120 秒、重复 3 次，表内为三轮
+中位数。测试前已停止对应设备上会争用 GPU/NPU/CPU 的应用。Jetson INT8
+使用显式 entropy calibrator、64 张 GMDCSA 图像及 FP16 layer fallback；旧的
+无标定 `trtexec --int8` 数据不进入本表。
+
+| 设备 | 模型/精度 | Aggregate FPS | Accelerator mean | Accelerator P95 | 说明 |
+|---|---|---:|---:|---:|---|
+| Orin Nano Super | YOLOv8s-Pose calibrated INT8 | 266.34 | 3.75 ms | 3.76 ms | 64 张 GMDCSA 标定；FP16 fallback；INT8 throughput 为 FP16 的 1.57× |
+| Orin Nano Super | YOLOv8s-Pose FP16 | 169.66 | 5.89 ms | 5.91 ms | 同 ONNX 的 FP16 基线 |
+| Orin Nano Super | YOLOv8m-Pose calibrated INT8 | 123.22 | 8.11 ms | 8.14 ms | 64 张 GMDCSA 标定；FP16 fallback；INT8 throughput 为 FP16 的 1.61× |
+| Orin Nano Super | YOLOv8m-Pose FP16 | 76.64 | 13.05 ms | 13.32 ms | 同 ONNX 的 FP16 基线 |
+| Orin NX Super | YOLOv8s-Pose calibrated INT8 | 299.61 | 3.34 ms | 3.34 ms | 64 张 GMDCSA 标定；FP16 fallback |
+| Orin NX Super | YOLOv8s-Pose FP16 | 192.37 | 5.20 ms | 5.20 ms | INT8 throughput 为 1.56× |
+| Orin NX Super | YOLOv8m-Pose calibrated INT8 | 139.16 | 7.18 ms | 7.20 ms | 64 张 GMDCSA 标定；FP16 fallback |
+| Orin NX Super | YOLOv8m-Pose FP16 | 88.26 | 11.33 ms | 11.35 ms | INT8 throughput 为 1.58× |
+| Pi 5 + Hailo-8 | YOLOv8s-Pose quantized HEF | 326.33 HW-only | 6.93 ms | N/A（CLI 不输出 P95） | 1 compiled context；持续运行发生 400→300 MHz health throttle |
+| Pi 5 + Hailo-8 | YOLOv8m-Pose quantized HEF | 31.00 HW-only | 26.89 ms | N/A（CLI 不输出 P95） | 3 compiled contexts |
+
+Hailo HEF 没有运行时 FP16 模式，不能补造一个 Hailo FP16 行。跨精度收益在
+Jetson 同设备内比较；跨设备硬件比较保留每行真实可执行精度。Hailo M batch 8
+为 88.46 FPS / 70.10 ms 每批，属于吞吐模式，不把 70.10 除以 8 冒充单帧延迟。
+Hailo S batch 8 的持续吞吐为 320.64 FPS，未高于 batch 1。
+
+真实 RTSP 应用计时单列：Nano S INT8/FP16 为 5.35/7.66 ms，M INT8/FP16 为
+9.92/14.94 ms；NX S INT8/FP16 为 4.82/6.82 ms，M INT8/FP16 为
+8.86/13.19 ms。该字段包含 preprocess、拷贝、TensorRT、回拷和 pose parser，
+不是上表的 GPU-only 时间。Hailo S 为 7.47–7.51 ms mean、7.99–8.10 ms P95
+（`pre_hailonet_to_hailonet_src`）；Hailo M 为 28.52–28.89 ms mean、
+32.30–37.86 ms P95（`appsink_enqueue_to_hailort_completion`）。两条 Hailo
+pipeline 的起点不同，不相互排名。结构化 Hailo 证据见
+[`reports/rpi-hailo8-aligned-20260901.json`](reports/rpi-hailo8-aligned-20260901.json)。
+INT8 应用测试只证明真实人物帧能产生有效输出，不是精度等价评测；校准候选包含
+Subject 4，因此这些引擎不能用于刷新冻结 S4 Accuracy/F1。若要发布 INT8 准确率，
+需改用不含 S4 的校准集，重新抽取 INT8 traces 并执行冻结协议。本轮 INT8 与 FP16
+的 fall-state 帧数差异明显，M INT8 的两个 60 秒窗口均为 0 个 fall-state 帧，不能
+把性能提升外推成检测精度等价。完整 Jetson 证据见
+[`reports/jetson-yolov8-crossprecision-20260901.json`](reports/jetson-yolov8-crossprecision-20260901.json)。
+
+本轮未刷新 RK3576/RK3588，按测试计划后置。`recamera-pro-test` 多次停在 SSH
+handshake timeout，因此 reCamera Pro 只保留既有现场数据，不填入新的 YOLOv8
+对齐表，也不把旧 YOLO11n 数字冒充本轮结果。
+
+## 历史原生前端台账（不可直接做硬件排名）
+
+以下行保留各平台原生模型和历史测试，不共享模型、精度或计时边界；横向硬件
+比较使用上一节。最终行必须同时记录设备、功耗模式、模型与量化、输入、并发路数、纯推理延迟、
 完整 pipeline 延迟/吞吐、CPU、RSS、加速器利用率和功耗。暂时无法可靠读取的
 指标写 `N/A（原因）`，不能省略测量口径。
 
@@ -40,7 +87,7 @@
 | Orin NX Super（2026-08-20 当前边界） | YOLO11s-Pose TRT FP16 | 640² | 9 路通过；10 路失败 | 5.75 ms mean / 173.8 FPS `trtexec` core | 9 路各 14.93 FPS；10 路各 13.05 FPS | N/A（报告未记录） | 8 路 664 MiB；9/10 路 N/A | GR3D 95%@9 路 / 99%@10 路 | N/A（报告未记录） | N/A（当前报告未记录） | RTSP+MQTT 实测最大通过 9 路，阈值 14.5 FPS/路 |
 | RK3576 | YOLO11n-Pose RKNN FP16 | 640² | 1/2 context | 63.03 mean / 74.44 P95 | 15.15 FPS；65.73 / 77.98 ms | 63.1% snapshot | 174.4 MiB | Core0/1 36%/0% snapshot | N/A（无可靠口径） | 257,793,213 B | 4 人 bus 图；2ctx blank 29.15 FPS |
 | RK3588 | YOLO11n-Pose RKNN FP16 | 640² | 1/2/3 context | 51.41 mean / 58.92 P95（1ctx） | 19.25 / 38.13 / 51.40 aggregate FPS | N/A（争用） | 189.9/217.6/294.8 MiB | 100%@1GHz（含既有负载） | N/A（无可靠口径） | 257,793,213 B | 现有 voice/RKLLM 争用；无 failed submit |
-| Raspberry Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 640² | 1/2；16 路 RTSP | 6.87 ms / 393.3 FPS（HailoRT） | 旧基线：单路 14.32 FPS、双路 14.33+14.30、有人流 14.72；本轮 16 路 14.5215–14.5715 FPS、probe 36.16–40.93 ms | 有人流 12.5% final；B17 246% | 有人流 130,784 KiB max；B17 1,366,592 KiB | N/A（CLI未给利用率） | N/A（无可靠板级遥测） | 143,442,009 B | 既有 2,602/2,602 MQTT contract 通过；本轮 ENABLE_MQTT=OFF，16 路为受控 RTSP 当前最大通过路数 |
+| Raspberry Pi 5 + Hailo-8 | YOLOv8s-Pose HEF INT8 | 640² | 1/2；16 路 RTSP | 6.87 ms / 393.3 FPS（15 秒短测峰值）；120 秒×3 中位数 6.93 ms / 326.33 FPS | 旧基线：单路 14.32 FPS、双路 14.33+14.30、有人流 14.72；本轮 16 路 14.5215–14.5715 FPS、probe 36.16–40.93 ms | 有人流 12.5% final；B17 246% | 有人流 130,784 KiB max；B17 1,366,592 KiB | N/A（CLI未给利用率） | N/A（无可靠板级遥测） | 143,442,009 B | 长测触发 health throttle；既有 2,602/2,602 MQTT contract 通过；16 路为受控 RTSP 最大通过路数 |
 
 ## 统一准确性表
 
@@ -175,10 +222,11 @@ Jetson 用 `trtexec --useCudaGraph --noDataTransfers --infStreams=N`，RK 用
 | RK3576 | FP16 | 56.13 ms | 17.50 | — | — | 既有基线；2 ctx 29.15 |
 | RK3576 | INT8 | 36.23 ms | 26.97 | — | — | w8a8；2 ctx 42.05 |
 
-＊ Jetson 的 INT8 引擎由 `trtexec --int8` 直接构建，**没有标定器也没有标定集**，动态范围
-是随意取的：只能用于看内核速度，检测结果不可用，不是可部署配置。`build_engine.sh` 只传
-`--fp16`；要做真正的 INT8 需要在项目里实现标定器与标定集，并在 INT8 姿态输出上重新冻结
-时序权重。
+＊ 本历史表的 Jetson INT8 引擎由 `trtexec --int8` 直接构建，**没有标定器也没有标定集**，
+动态范围是随意取的：只能用于看内核速度，检测结果不可用，不是可部署配置。2026-09-01
+已为 YOLOv8 S/M 增加显式 entropy calibrator 和 64 张真实图片标定；有效性能数据只使用
+本文件顶部的新表。发布 INT8 准确率仍需在不含冻结测试主体的校准集上重建引擎，并重新
+抽取姿态 traces 执行冻结协议。
 
 **只有占用加速器的共存业务才会影响数字，一旦影响就可能把排序颠倒。** Orin NX 在自身跑着
 GPU 推理业务时 FP16 测得 264.9 FPS，低于 Orin Nano，与两者算力关系相反；停掉后是
@@ -265,7 +313,7 @@ contract 共 2 项测试全部通过。
 
 | 模型/口径 | 单路 | 双路 | CPU/RSS/温度/功耗 | 跌倒 Accuracy | Runtime 镜像 |
 |---|---:|---:|---:|---:|---:|
-| YOLOv8s-Pose Hailo-8，纯 NPU / synthetic pipeline | 393.3 FPS、6.87 ms / 29.77 FPS、7.81 ms probe | 每路 29.86/29.66 FPS，probe 7.87/7.81 ms | 双路 CPU 38.2%、RSS 118,480 KiB、60.05°C；功耗 N/A | S4 temporal gate 88.89% | 143,442,009 B |
+| YOLOv8s-Pose Hailo-8，纯 NPU / synthetic pipeline | 15 秒短测峰值 393.3 FPS、6.87 ms；120 秒×3 中位数 326.33 FPS、6.93 ms / 29.77 FPS、7.81 ms probe | 每路 29.86/29.66 FPS，probe 7.87/7.81 ms | 双路 CPU 38.2%、RSS 118,480 KiB、60.05°C；功耗 N/A | S4 temporal gate 88.89% | 143,442,009 B |
 | Mac RTSP 640²@15 低码率控制流 | 14.32 app FPS；15.03 steady MQTT FPS；probe 7.77/8.36 ms mean/P95 | 每路 14.33/14.30 app FPS；15.07/15.04 steady MQTT FPS；probe P95 15.37/15.43 ms | 单/双路 CPU final 11.5%/22.9%；RSS max 127,760/182,080 KiB；温度 max 60.4/60.9°C；功耗 N/A | 无人物检测，不能用于 Accuracy | 143,406,131 B |
 | Mac RTSP 1280x720@15 对照 | 13.41 app FPS；14.17 steady MQTT FPS；probe 7.88/8.50 ms mean/P95 | — | CPU final 24.8%；RSS max 133,184 KiB；温度 max 60.4°C | 无人物检测，不能用于 Accuracy | 143,406,131 B |
 | Spark LAN `fall-person`，GMDCSA S4 Fall/01 循环 | 14.72 app FPS；15.02 steady MQTT FPS；probe 7.48/8.53 ms mean/P95 | — | CPU final/max 12.5%/15.0%；RSS max 130,784 KiB；温度 max 62.0°C | 循环正样本功能测试，不能用于 Accuracy | 143,406,131 B |

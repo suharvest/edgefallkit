@@ -113,6 +113,33 @@ snapshots were 38.2% / 118,480 KiB at 60.05 C. `mcp_face_rec` was restarted
 afterward and verified healthy. These synthetic-input numbers are throughput
 evidence, not RTSP end-to-end latency or fall accuracy.
 
+A longer 2026-09-01 run changed the interpretation of the 393.3 FPS figure.
+Each case used 120 seconds and three repetitions with the other Pi inference
+containers stopped. YOLOv8s initially ran near 394 FPS, then Hailo's health
+monitor reduced the device clock from 400 to 350 and 300 MHz after reporting
+about 104 C. The sustained three-run medians were:
+
+| HEF | Batch | HW-only FPS | Streaming FPS | HailoRT HW latency |
+|---|---:|---:|---:|---:|
+| YOLOv8s-Pose, 1 context | 1 | 326.33 | 298.47 | 6.93 ms |
+| YOLOv8s-Pose, 1 context | 8 | 320.64 | 298.89 | 8.43 ms/batch |
+| YOLOv8m-Pose, 3 contexts | 1 | 31.00 | 31.00 | 26.89 ms |
+| YOLOv8m-Pose, 3 contexts | 8 | 88.46 | 88.44 | 70.10 ms/batch |
+
+The earlier 15-second S result is a short-run peak, not sustained capacity.
+Batch 8 does not improve sustained S throughput; it raises M aggregate
+throughput 2.85x while also raising the latency of a complete batch. Batch
+latency is not divided by eight and presented as single-frame latency.
+
+The same maintenance window ran the published rc3 application against Spark
+`fall-person` with 30 seconds warm-up plus 120 seconds × 3. S sustained
+15.00–15.06 output FPS with 7.47–7.51 ms mean and 7.99–8.10 ms P95 for
+`pre_hailonet_to_hailonet_src`. M sustained only 14.12–14.16 FPS with
+28.52–28.89 ms mean and 32.30–37.86 ms P95 for
+`appsink_enqueue_to_hailort_completion`. These two application intervals have
+different start markers and are not directly comparable. Hailo's payload keeps
+`inference_time_ms` unavailable rather than substituting either interval.
+
 The runtime image is a multi-stage build and does not contain compiler,
 headers, source, HEF, or HailoRT. Model and ABI-locked host libraries are
 mounted read-only; the `builder` is isolated behind the `build` profile. The

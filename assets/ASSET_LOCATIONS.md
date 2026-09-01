@@ -1,6 +1,6 @@
 # Evaluation material inventory
 
-Last verified: 2026-08-13 (Asia/Shanghai)
+Last verified: 2026-09-02 (Asia/Shanghai)
 
 Large evaluation material is not stored in this source project. Orin Nano is
 the evaluated working/debug machine; Spark is the durable backup.
@@ -12,7 +12,7 @@ the evaluated working/debug machine; Spark is the durable backup.
 | GMDCSA-24, RealBiomFall, manifests and prepared links | `/tmp/fall-eval-data/` | `/home/harvest/datasets/fall-detection/evaluation/` |
 | YOLO11s/m 15 FPS temporal traces | `/tmp/fall-temporal-traces/` | `/home/harvest/datasets/fall-detection/traces/` |
 | YOLO11s/m ONNX and SM87 TRT 10.3 engines | `/tmp/jetson-fall/` | `/home/harvest/datasets/fall-detection/models/` |
-| Jetson ARM64 runtime image | local `fall-detection:jetson-slim` build source on Orin | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1` |
+| Jetson ARM64 runtime image | local `fall-detection:jetson-slim` build source on Orin | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3` |
 | RK3576/RK3588 YOLO11n-Pose FP16 RKNN artifacts | WSL2 `/home/harve/fall-rknn/` and this project's ignored platform `models/` directories | `/home/harvest/datasets/fall-detection/models/rknn/{rk3576,rk3588}/` (verified 2026-08-13) |
 | RK LAN E2E raw MQTT/summary | Mac `/private/tmp/rk*-spark-*` | `/home/harvest/datasets/fall-detection/evaluation/rk-e2e/20260813/` |
 | RK3576 GMDCSA working copy/traces | `cat-remote:/home/cat/fall-detection-data/{gmdcsa24,traces/rk3576}` | traces `/home/harvest/datasets/fall-detection/traces/rk3576/`; profile/reports `/home/harvest/datasets/fall-detection/rk-training/rk3576/` |
@@ -102,11 +102,12 @@ from the downloaded pickle files.
 
 ## Rebuilding traces and engines
 
-The published Jetson runtime was pulled back on Orin Nano and Orin NX with
-RepoDigest
-`sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff`.
-Registry-pulled inspect reports 51,825,508 bytes, Linux/ARM64. Both devices
-passed `app.py --validate`. The image contains no ONNX or engine; the external
+The published Jetson RC3 runtime was pulled back on Orin NX with RepoDigest
+`sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db`.
+Registry-pulled inspect reports 138,045,196 bytes, Linux/ARM64. Embedded
+runtime, app, config and schema hashes matched the release manifest; `app.py`
+compiled and the library loaded with host TensorRT/CUDA. The prior RC2 image
+was pulled back on Orin Nano and Orin NX. The image contains no ONNX or engine; the external
 artifact remains subject to its upstream model provenance and is prepared with
 `platforms/jetson/tools/prepare_model.sh`.
 

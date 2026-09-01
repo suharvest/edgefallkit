@@ -3,13 +3,17 @@
 ## One-command model preparation and deployment
 
 The published model-free ARM64 runtime is
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc2`
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3`
 with RepoDigest
+`sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db`.
+It carries the non-blocking CUDA stream path, process sharding, and the repaired
+YOLOv8m mixed-precision runtime. The rc3 image was pulled back and verified on
+Orin NX (Linux/ARM64, digest and embedded file hashes, Python and host
+TensorRT/CUDA library-load smoke). The previous
+`0.1.0-rc2` digest is
 `sha256:87cd652844d05eb17c7f16c9f8c95d23e5a9abda10692be10fa0ceb447750d9b`.
-It carries the non-blocking CUDA stream path and process sharding described
-under *Process sharding for stream density*, and was pulled back and verified
-on AGX Orin, Orin NX Super and Orin Nano Super. The previous
-`0.1.0-rc1` digest is
+The earlier
+`0.1.0-rc1` digest was
 `sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff`.
 The slim Compose uses this image by default and supports
 `FALL_DETECTION_IMAGE` for a pinned mirror or local build.

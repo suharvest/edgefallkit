@@ -1,6 +1,6 @@
 # Delivery status
 
-Last audited: 2026-08-13 (Asia/Shanghai)
+Last audited: 2026-09-02 (Asia/Shanghai)
 
 This file distinguishes deployable engineering baselines from the remaining
 external-validation work. Jetson, RK3576, RK3588, Hailo-8, SG2002 and Pro now have
@@ -11,7 +11,7 @@ frontend, split and temporal-gate/deployed-state-machine scope.
 
 | Platform | Runtime and configuration | Deployment mechanism | Required external artifact | Current verification |
 |---|---|---|---|---|
-| Jetson Orin Nano/NX | Complete | slim Docker Compose; published RC1 | target-built SM87/TRT 10.3 pose engine from the explicit-license preparation helper | registry pull-back on Nano/NX, app/config smoke, Spark LAN RTSP, positive fall path, and MQTT v1 contract verified |
+| Jetson Orin Nano/NX | Complete | slim Docker Compose; published RC3 | target-built SM87/TRT 10.3 pose engine from the explicit-license preparation helper | RC3 registry pull-back on Orin NX, embedded hash and app/config smoke, host TensorRT/CUDA library-load smoke; prior RC2 multi-device and MQTT/RTSP checks retained |
 | RK3576 | Complete | Docker Compose; published RC2 | RK3576 `.rknn` (license HOLD) and native temporal `.npz` | RC2 registry pull-back/config validation, MPP/RGA aspect-fit RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
 | RK3588 | Complete | Docker Compose; published RC2 | RK3588 `.rknn` (license HOLD) and native temporal `.npz` | RC2 registry pull-back/config validation, MPP/RGA aspect-fit RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
 | Raspberry Pi 5 + Hailo-8 | Complete | Docker Compose; published RC1 | Hailo-8 `yolov8s_pose.hef` from official URL | registry pull-back, metadata smoke, single/dual RTSP, positive fall path, and MQTT v1 contract verified |
@@ -25,10 +25,11 @@ enabled by the current application ABI.
 ## Before deploying
 
 Jetson's published ARM64 image is
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1`
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3`
 with immutable RepoDigest
-`sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff`.
-Nano and NX pulled and validated this digest. The image contains no ONNX or
+`sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db`.
+Orin NX pulled and validated this digest; the prior RC2 digest was validated
+on Nano, NX and AGX. The image contains no ONNX or
 TensorRT engine; `deploy.sh jetson` prepares the engine on the target and the
 slim Compose supports the `FALL_DETECTION_IMAGE` override.
 
@@ -101,5 +102,6 @@ suitability or a commercial model license is documented.
 - Dataset/model/trace locations: `assets/ASSET_LOCATIONS.md`
 - Jetson ONNX restore/export: `platforms/jetson/models/README.md`
 - Hailo fixed HEF download: `platforms/rpi-hailo/scripts/fetch_model.sh`
-- Machine-readable current RC manifest: `release/0.1.0-rc2.json`
+- Machine-readable Jetson RC3 manifest: `release/jetson-0.1.0-rc3.json`
+- Historical multi-platform RC2 manifest: `release/0.1.0-rc2.json`
 - Historical RC1 manifest: `release/0.1.0-rc1.json`

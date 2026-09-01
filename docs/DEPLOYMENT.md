@@ -16,7 +16,7 @@ each platform also documents its offline or local-model path.
 
 | Platform | Image | Immutable RepoDigest |
 |---|---|---|
-| Jetson Orin | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1` | `sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff` |
+| Jetson Orin | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3` | `sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db` |
 | RK3576 / RK3588 | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2` | `sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8` |
 | Raspberry Pi 5 + Hailo-8 | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc3` | `sha256:994b363dc1aa68d3ada0ca3590bd810ab26a2240918bcffe426104761a2f772a` |
 

@@ -301,11 +301,13 @@ and [M](evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json) reports.
 
 | Runtime | Published image | Immutable RepoDigest |
 |---|---|---|
-| Jetson | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1` | `sha256:162824bedda86eeadb1bc265b21ae14bb264ad907f68f3ea001db745e38f32ff` |
+| Jetson | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3` | `sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db` |
 | RKNN | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2` | `sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8` |
 | Hailo | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc3` | `sha256:994b363dc1aa68d3ada0ca3590bd810ab26a2240918bcffe426104761a2f772a` |
 
-All three are Linux/ARM64 and were pulled back on their target devices. Models
+All three are Linux/ARM64. The Jetson RC3 image was pulled back on Orin NX;
+the RKNN and Hailo images retain their separately documented target-device
+pull-back evidence. Models
 are deliberately excluded:
 
 - Jetson exports ONNX in an isolated builder and builds the TensorRT engine on
@@ -460,4 +462,5 @@ versions and provenance.
 
 Release history is recorded in [CHANGELOG.md](CHANGELOG.md).
 The immutable container references for this release are also available in the
-[machine-readable RC manifest](release/0.1.0-rc1.json).
+[Jetson RC3 manifest](release/jetson-0.1.0-rc3.json); earlier multi-platform
+baselines remain in the historical RC manifests.

@@ -378,7 +378,7 @@ manifest = {
     "input": [1, 3, int(env("IMG_SIZE")), int(env("IMG_SIZE"))],
     "profile": {"min": env("PROFILE_MIN"), "opt": env("PROFILE_OPT"), "max": env("PROFILE_MAX")}
   },
-  "runtime": {"model_external": True, "runtime_image": "sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc1"}
+  "runtime": {"model_external": True, "runtime_image": "sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3"}
 }
 with open(os.sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, sort_keys=True)

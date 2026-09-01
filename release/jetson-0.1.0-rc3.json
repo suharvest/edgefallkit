@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "project": "EdgeFallKit",
+  "component": "jetson-runtime",
+  "version": "0.1.0-rc3",
+  "released_at": "2026-09-02",
+  "source_revision": "55fff994dde18d175881e03a2dc57b38c01fd1fa",
+  "image": {
+    "reference": "sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3",
+    "digest": "sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db",
+    "platform": "linux/arm64",
+    "size_bytes": 138045196,
+    "models_embedded": false
+  },
+  "embedded_files": {
+    "runtime": "addccb0c85d6769fe1497423d023b9af9d485fe4c1054852644c29a7528f994d",
+    "app": "9978654bedd7dace669d5117aab555cf2c9aa369e4cb0fddf2bfd762d2bcf5d3",
+    "config": "70cd27dfc727b4f39a46fede3afd7b9f5fdc8c709b8af903badc195b6a54c854",
+    "schema": "5fa9428c117f6f700144431ae2ffb15e4196bca813db29c7ca7cfa287b3aedf4"
+  },
+  "features": [
+    "non-blocking CUDA streams with async pinned output copy",
+    "runtime.workers process sharding with one MQTT client id per shard",
+    "YOLOv8m mixed precision with INT8 backbone and FP16 neck, detection and pose layers",
+    "separate S and M temporal profiles with profile-aware score threshold"
+  ],
+  "verification": {
+    "device": "orin-nx",
+    "registry_pullback": true,
+    "digest_match": true,
+    "embedded_hashes_match": true,
+    "app_py_compile": true,
+    "host_tensorrt_cuda_cdll_load": true
+  }
+}

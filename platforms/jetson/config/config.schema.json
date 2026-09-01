@@ -7,9 +7,20 @@
     "trt_library": {"type": "string", "minLength": 1},
     "temporal_profile": {
       "type": "string",
-      "enum": ["auto", "yolo11s-pose", "yolo11m-pose", "yolov8-int8-pose"],
+      "enum": ["auto", "yolo11s-pose", "yolo11m-pose", "yolov8s-int8-pose", "yolov8m-int8-pose", "yolov8-int8-pose"],
       "default": "auto",
-      "description": "Temporal weights; auto selects the shared YOLOv8 INT8 profile for calibrated INT8 engines, yolo11m for YOLO11m engines, and otherwise yolo11s."
+      "description": "Temporal weights; auto selects independent YOLOv8s/m profiles for INT8 or mixed engine filenames, yolo11m for YOLO11m engines, and otherwise yolo11s. yolov8-int8-pose is a compatibility alias."
+    },
+    "score_threshold_by_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "yolo11s-pose": {"type": "number", "minimum": 0, "maximum": 1},
+        "yolo11m-pose": {"type": "number", "minimum": 0, "maximum": 1},
+        "yolov8s-int8-pose": {"type": "number", "minimum": 0, "maximum": 1},
+        "yolov8m-int8-pose": {"type": "number", "minimum": 0, "maximum": 1},
+        "yolov8-int8-pose": {"type": "number", "minimum": 0, "maximum": 1}
+      }
     },
     "input": {
       "type": "object",

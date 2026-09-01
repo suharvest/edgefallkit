@@ -75,6 +75,15 @@ def main():
                     help="newline-delimited calibration image paths")
     ap.add_argument("--engine", type=Path, required=True)
     ap.add_argument("--cache", type=Path, required=True)
+    ap.add_argument(
+        "--fp16-layer-prefix",
+        action="append",
+        default=[],
+        help=(
+            "force matching TensorRT layer names to FP16; repeat for multiple "
+            "prefixes (for example /model.22/cv4 for the YOLO pose branch)"
+        ),
+    )
     args = ap.parse_args()
     images = []
     for line in args.manifest.read_text().splitlines():
@@ -104,6 +113,42 @@ def main():
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 4 << 30)
     config.set_flag(trt.BuilderFlag.INT8)
     config.set_flag(trt.BuilderFlag.FP16)
+    if args.fp16_layer_prefix:
+        config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+        matched = []
+        skipped_non_float = []
+        for index in range(network.num_layers):
+            layer = network.get_layer(index)
+            if not any(layer.name.startswith(prefix) for prefix in args.fp16_layer_prefix):
+                continue
+            outputs = [
+                layer.get_output(output_index)
+                for output_index in range(layer.num_outputs)
+                if layer.get_output(output_index) is not None
+            ]
+            if not outputs or any(
+                output.dtype not in (trt.float16, trt.float32) for output in outputs
+            ):
+                skipped_non_float.append(layer.name)
+                continue
+            layer.precision = trt.float16
+            for output_index in range(layer.num_outputs):
+                layer.set_output_type(output_index, trt.float16)
+            matched.append(layer.name)
+        if not matched:
+            raise SystemExit(
+                "no TensorRT layers matched --fp16-layer-prefix="
+                + ",".join(args.fp16_layer_prefix)
+            )
+        print(
+            "fp16_layer_prefixes=" + ",".join(args.fp16_layer_prefix)
+            + f" matched_layers={len(matched)}"
+        )
+        for name in matched:
+            print(f"fp16_layer={name}")
+        for name in skipped_non_float:
+            print(f"fp16_skipped_non_float_layer={name}")
+    config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
     config.int8_calibrator = Calibrator(images, args.cache)
     serialized = builder.build_serialized_network(network, config)
     if serialized is None:

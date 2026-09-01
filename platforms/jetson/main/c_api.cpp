@@ -104,8 +104,12 @@ extern "C" jf_temporal_handle* jf_temporal_create_profile(const char* profile) {
     if (std::strcmp(profile, "yolo11m-pose") == 0) {
         return new jf_temporal_handle(jetson_fall::TemporalProfile::Yolo11mPose);
     }
-    if (std::strcmp(profile, "yolov8-int8-pose") == 0) {
-        return new jf_temporal_handle(jetson_fall::TemporalProfile::YoloV8Int8Pose);
+    if (std::strcmp(profile, "yolov8s-int8-pose") == 0 ||
+        std::strcmp(profile, "yolov8-int8-pose") == 0) {
+        return new jf_temporal_handle(jetson_fall::TemporalProfile::YoloV8sInt8Pose);
+    }
+    if (std::strcmp(profile, "yolov8m-int8-pose") == 0) {
+        return new jf_temporal_handle(jetson_fall::TemporalProfile::YoloV8mInt8Pose);
     }
     return nullptr;
 }

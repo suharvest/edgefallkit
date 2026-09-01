@@ -219,17 +219,30 @@ def test_temporal_profile_auto_switches_for_yolov8_int8():
     assert APP.resolve_temporal_profile({
         "engine_path": "/models/yolov8s-pose.gmdcsa64-int8.engine",
         "temporal_profile": "auto",
-    }) == "yolov8-int8-pose"
+    }) == "yolov8s-int8-pose"
     assert APP.resolve_temporal_profile({
         "engine_path": "/models/yolov8m-pose.calibrated-int8.engine",
-    }) == "yolov8-int8-pose"
+    }) == "yolov8m-int8-pose"
+    assert APP.resolve_temporal_profile({
+        "engine_path": "/models/yolov8m-pose.mixed.engine",
+    }) == "yolov8m-int8-pose"
     assert APP.resolve_temporal_profile({
         "engine_path": "/models/yolov8m-pose.fp16.engine",
     }) == "yolo11s-pose"
     assert APP.resolve_temporal_profile({
         "engine_path": "/models/renamed.engine",
         "temporal_profile": "yolov8-int8-pose",
-    }) == "yolov8-int8-pose"
+    }) == "yolov8s-int8-pose"
+    assert APP.resolve_temporal_profile({
+        "engine_path": "/models/yolov8m-pose.int8.engine",
+        "temporal_profile": "yolov8-int8-pose",
+    }) == "yolov8m-int8-pose"
+    config = {
+        "score_threshold": 0.35,
+        "score_threshold_by_profile": {"yolov8m-int8-pose": 0.25},
+    }
+    assert APP.resolve_score_threshold(config, "yolov8s-int8-pose") == 0.35
+    assert APP.resolve_score_threshold(config, "yolov8m-int8-pose") == 0.25
 
 
 def test_shard_client_id_is_unique_per_shard():

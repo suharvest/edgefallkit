@@ -2,6 +2,7 @@
   "engine_path": "/models/yolo11n-pose.sm87.trt10.3.fp16.engine",
   "trt_library": "/app/libjetson_fall_trt.so",
   "temporal_profile": "auto",
+  "score_threshold_by_profile": {"yolov8m-int8-pose": 0.15},
   "input": {"width": 640, "height": 640},
   "score_threshold": 0.35,
   "keypoint_threshold": 0.25,

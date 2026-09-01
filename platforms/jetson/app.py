@@ -123,11 +123,12 @@ class TrtBridge:
         self.library = ctypes.CDLL(library_path)
         self._bind_api()
         self.temporal_profile = resolve_temporal_profile(config)
+        score_threshold = resolve_score_threshold(config, self.temporal_profile)
         self.handle = self.library.jf_trt_create(
             os.fsencode(config["engine_path"]),
             int(config.get("input", {}).get("width", 640)),
             int(config.get("input", {}).get("height", 640)),
-            float(config.get("score_threshold", 0.35)),
+            score_threshold,
             float(config.get("keypoint_threshold", 0.25)),
             float(config.get("nms_threshold", 0.45)),
         )
@@ -747,17 +748,30 @@ class StreamWorker(threading.Thread):
         }
 
 
-TEMPORAL_PROFILES = ("auto", "yolo11s-pose", "yolo11m-pose", "yolov8-int8-pose")
+TEMPORAL_PROFILES = (
+    "auto", "yolo11s-pose", "yolo11m-pose",
+    "yolov8s-int8-pose", "yolov8m-int8-pose",
+    # Compatibility with the short-lived shared profile name. The resolver
+    # maps it to S or M before it crosses the C boundary.
+    "yolov8-int8-pose",
+)
 
 
 def resolve_temporal_profile(config: dict[str, Any]) -> str:
     configured = str(config.get("temporal_profile", "auto"))
+    engine_name = Path(str(config["engine_path"])).name.lower()
+    if configured == "yolov8-int8-pose":
+        return "yolov8m-int8-pose" if "yolov8m" in engine_name else "yolov8s-int8-pose"
     if configured != "auto":
         return configured
-    engine_name = Path(str(config["engine_path"])).name.lower()
-    if "yolov8" in engine_name and "int8" in engine_name:
-        return "yolov8-int8-pose"
+    if "yolov8" in engine_name and ("int8" in engine_name or "mixed" in engine_name):
+        return "yolov8m-int8-pose" if "yolov8m" in engine_name else "yolov8s-int8-pose"
     return "yolo11m-pose" if "yolo11m" in engine_name else "yolo11s-pose"
+
+
+def resolve_score_threshold(config: dict[str, Any], temporal_profile: str) -> float:
+    overrides = config.get("score_threshold_by_profile", {})
+    return float(overrides.get(temporal_profile, config.get("score_threshold", 0.35)))
 
 
 def load_config(path: str) -> dict[str, Any]:
@@ -770,6 +784,14 @@ def load_config(path: str) -> dict[str, Any]:
     temporal_profile = config.setdefault("temporal_profile", "auto")
     if temporal_profile not in TEMPORAL_PROFILES:
         raise ValueError(f"temporal_profile must be one of {', '.join(TEMPORAL_PROFILES)}")
+    threshold_overrides = config.setdefault("score_threshold_by_profile", {})
+    if not isinstance(threshold_overrides, dict):
+        raise ValueError("score_threshold_by_profile must be an object")
+    for profile, value in threshold_overrides.items():
+        if profile not in TEMPORAL_PROFILES or profile == "auto":
+            raise ValueError(f"invalid score threshold profile: {profile}")
+        if not isinstance(value, (int, float)) or not 0.0 <= float(value) <= 1.0:
+            raise ValueError(f"score threshold for {profile} must be in [0,1]")
     input_config = config.get("input", {})
     width = int(input_config.get("width", 640))
     height = int(input_config.get("height", 640))

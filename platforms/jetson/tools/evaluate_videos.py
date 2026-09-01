@@ -41,8 +41,10 @@ class Clip:
     onset_sec: float
 
 
-def gmdcsa_clips(root: Path) -> list[Clip]:
-    subject = root / "subject-4"
+def gmdcsa_clips(root: Path, subject_id: int = 4) -> list[Clip]:
+    if subject_id not in (3, 4):
+        raise ValueError("GMDCSA deployed evaluation supports development Subject 3 or test Subject 4")
+    subject = root / f"subject-{subject_id}"
     onset_by_name: dict[str, float] = {}
     pattern = re.compile(r"fall(?:ing)?[^\[]*\[\s*([0-9]+(?:\.[0-9]+)?)", re.I)
     csv_path = subject / "Fall.csv"
@@ -54,16 +56,20 @@ def gmdcsa_clips(root: Path) -> list[Clip]:
     clips: list[Clip] = []
     for kind in ("ADL", "Fall"):
         for path in sorted((subject / kind).glob("*.mp4")):
-            if (kind, path.stem) in SMOKE_TEST_CLIPS:
+            if subject_id == 4 and (kind, path.stem) in SMOKE_TEST_CLIPS:
                 continue
             clips.append(Clip(
                 path=path,
-                clip_id=f"subject-4/{kind}/{path.stem}",
+                clip_id=f"subject-{subject_id}/{kind}/{path.stem}",
                 label=int(kind == "Fall"),
                 onset_sec=onset_by_name.get(path.name, math.inf),
             ))
-    if len(clips) != 27 or sum(clip.label for clip in clips) != 12:
-        raise RuntimeError(f"expected 27 clean GMDCSA clips (12 falls), got {len(clips)}")
+    expected = {3: (43, 21), 4: (27, 12)}[subject_id]
+    if len(clips) != expected[0] or sum(clip.label for clip in clips) != expected[1]:
+        scope = "clean " if subject_id == 4 else ""
+        raise RuntimeError(
+            f"expected {expected[0]} {scope}Subject {subject_id} clips "
+            f"({expected[1]} falls), got {len(clips)}")
     missing_onsets = [clip.clip_id for clip in clips if clip.label and not math.isfinite(clip.onset_sec)]
     if missing_onsets:
         raise RuntimeError(f"missing GMDCSA fall onsets: {missing_onsets}")
@@ -206,6 +212,8 @@ def main() -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--gmdcsa", type=Path)
     source.add_argument("--realbiomfall-manifest", type=Path)
+    parser.add_argument("--gmdcsa-subject", type=int, choices=(3, 4), default=4,
+                        help="3 for development selection; 4 for frozen clean test")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=0, help="smoke only; never use for reported metrics")
     args = parser.parse_args()
@@ -217,7 +225,8 @@ def main() -> int:
     config["engine_path"] = str(args.engine)
     config["trt_library"] = str(args.library)
     config.setdefault("mqtt", {})["enabled"] = False
-    clips = gmdcsa_clips(args.gmdcsa) if args.gmdcsa else realbiomfall_clips(args.realbiomfall_manifest)
+    clips = (gmdcsa_clips(args.gmdcsa, args.gmdcsa_subject)
+             if args.gmdcsa else realbiomfall_clips(args.realbiomfall_manifest))
     if args.limit > 0:
         clips = clips[:args.limit]
 
@@ -237,7 +246,9 @@ def main() -> int:
     report = {
         "protocol": "15fps, frozen thresholds, one fresh tracker/temporal state per clip",
         "engine": str(args.engine),
-        "dataset": "gmdcsa24-subject4-clean" if args.gmdcsa else "realbiomfall-testing",
+        "dataset": (f"gmdcsa24-subject{args.gmdcsa_subject}-"
+                    f"{'clean-test' if args.gmdcsa_subject == 4 else 'development'}")
+                   if args.gmdcsa else "realbiomfall-testing",
         "temporal_gate": metric_summary(clips, "temporal_gate_trigger_sec", rows),
         "deployed_alert": metric_summary(clips, "deployed_alert_trigger_sec", rows),
         "pose_coverage": statistics.fmean(row["pose_coverage"] for row in rows),

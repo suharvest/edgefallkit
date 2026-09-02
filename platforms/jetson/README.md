@@ -249,6 +249,22 @@ than a throughput limit:
 | Orin Nano Super / YOLOv8m mixed INT8/FP16 | 9/3/14/1, 81.8% | 10/2/14/1, 87.0% | 94.5% | 12.84 ms |
 | Orin NX Super / YOLOv8m mixed INT8/FP16 | 9/3/14/1, 81.8% | 10/2/14/1, 87.0% | 94.5% | 11.31 ms |
 
+For the 27-clip S4 deployed comparison, the historical YOLO11m FP16 baseline is
+TP/FN/TN/FP `12/0/11/4` (Accuracy 85.2%, Recall 100%, Specificity 73.3%,
+Precision 75.0%, F1 85.7%, mean alert latency 1.26 s). The repaired YOLOv8m
+mixed result is `10/2/14/1` (Accuracy 88.9%, Recall 83.3%, Specificity 93.3%,
+Precision 90.9%, F1 87.0%, mean alert latency 1.43 s; pose coverage 94.5%).
+This is an engineering-version comparison, not a same-model A/B: YOLO11m FP16
+and YOLOv8m mixed INT8/FP16 use different pose models and frontends. Both follow
+S1–2 fit, S3 selection, S1–3 refit and S4 27-clip test. M calibration/fitting
+excluded S4, but earlier failed-M investigations observed S4, so the latest
+result is regression evidence rather than a pristine one-shot holdout. Relative
+to the historical baseline, the latest result changes Accuracy/Recall/
+Specificity/Precision/F1 by +3.7/−16.7/+20.0/+15.9/+1.3 pp and latency by
++0.17 s. YOLOv8m FP16 currently has performance/RTSP sanity only; no frozen
+accuracy result is available. The temporal MLP remains FP32; “INT8 profile”
+names the pose frontend adaptation.
+
 The full-INT8 M result was bounded by frontend coverage: forcing only the Pose
 branch or complete `model.22` head to FP16 left overall development coverage
 near 72%. Constraining `model.10–22` restored development coverage to 94.7%,

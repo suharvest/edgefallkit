@@ -238,23 +238,37 @@ one-shot publication holdout. Build hashes, precision boundaries and raw
 reports are in the
 [structured repair report](evaluation/reports/jetson-yolov8m-mixed-20260902.json).
 
-### Frozen GMDCSA Subject 4
+### GMDCSA Subject 4 results
 
 | Frontend/profile | Accuracy | Recall | Specificity | F1 | Mean alert latency |
 |---|---:|---:|---:|---:|---:|
 | reCamera CVI baseline | 74.1% | 83.3% | 66.7% | 74.1% | 1.75 s |
 | Jetson YOLO11s optimized | 81.5% | 83.3% | 80.0% | 80.0% | 1.47 s |
 | Jetson YOLO11m optimized | 85.2% | 100% | 73.3% | 85.7% | 1.26 s |
+| Jetson YOLOv8m mixed INT8/FP16 repaired | 88.9% | 83.3% | 93.3% | 87.0% | 1.43 s |
 | RK3576 native temporal gate | 88.9% | 100% | 80.0% | 88.9% | 1.49 s |
 | RK3588 native temporal gate | 88.9% | 100% | 80.0% | 88.9% | 1.53 s |
 | reCamera Pro production fallback on Pro traces | 81.5% | 91.7% | 73.3% | 81.5% | 1.22 s |
 | reCamera Pro native experiment | 70.4% | 75.0% | 66.7% | 69.2% | 1.47 s |
 | Hailo-8 native temporal gate | 88.9% | 100% | 80.0% | 88.9% | 1.61 s |
 
-The clean test has 27 clips. RK/Hailo rows measure the frozen temporal gate;
+The historical frozen test has 27 clips. The repaired YOLOv8m row is regression
+evidence with the same 27-clip composition, as qualified below. RK/Hailo rows measure the frozen temporal gate;
 they must not be relabeled as full deployed-state-machine accuracy. Jetson also
 has RealBiomFall external-set evidence; RK/Hailo external evaluation remains a
 documented follow-up.
+
+The YOLOv8m row is the latest deployed regression result, not a strict model
+A/B against the historical YOLO11m row: the pose models and precision frontends
+differ (YOLO11m FP16 versus YOLOv8m mixed INT8/FP16). Both use the same S1–2
+fit, S3 selection, S1–3 refit and S4 27-clip protocol. The historical YOLO11m
+FP16 result is a clean frozen S4 baseline; the repaired M calibration and fitting
+excluded S4, but earlier failed-M investigations had observed S4. Relative to
+that baseline, the repaired M result is +3.7 pp Accuracy, −16.7 pp Recall,
++20.0 pp Specificity, +15.9 pp Precision, +1.3 pp F1 and +0.17 s latency.
+The YOLOv8m FP16 frontend currently has performance/RTSP sanity evidence only,
+not a frozen accuracy result. The temporal MLP remains FP32; “INT8 profile”
+identifies the corresponding pose frontend rather than temporal quantization.
 
 ## How it works
 

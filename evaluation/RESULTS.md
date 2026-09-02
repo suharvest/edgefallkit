@@ -1,6 +1,6 @@
 # 摔倒检测成果与对比台账
 
-更新日期：2026-09-01
+更新日期：2026-09-02
 
 本文件记录可横向比较的冻结结果。开发集成绩、最终测试成绩和外部测试
 严格分开；除非表格明确注明，否则不要把开发集数字作为产品准确率。
@@ -115,6 +115,7 @@ Subjects 1–3 重训/冻结其时序 profile，再只读 Subject 4 和外部集
 | reCamera v0.2 CVI | GMDCSA S4 | 10 | 2 | 10 | 5 | 74.1% | 83.3% | 66.7% | 66.7% | 74.1% | 1.75 s | frozen baseline |
 | Jetson YOLO11s optimized | GMDCSA S4 | 10 | 2 | 12 | 3 | 81.5% | 83.3% | 80.0% | 76.9% | 80.0% | 1.47 s | frozen |
 | Jetson YOLO11m optimized | GMDCSA S4 | 12 | 0 | 11 | 4 | 85.2% | 100% | 73.3% | 75.0% | 85.7% | 1.26 s | frozen |
+| Jetson YOLOv8m mixed INT8/FP16 repaired | GMDCSA S4 | 10 | 2 | 14 | 1 | 88.9% | 83.3% | 93.3% | 90.9% | 87.0% | 1.43 s | regression evidence；早期 M 调试已观察 S4 |
 | reCamera Pro production fallback on Pro traces | GMDCSA S4 | 11 | 1 | 11 | 4 | 81.5% | 91.7% | 73.3% | 73.3% | 81.5% | 1.22 s | frozen comparator；production default；early alert 1 |
 | reCamera Pro native profile | GMDCSA S4 | 9 | 3 | 10 | 5 | 70.4% | 75.0% | 66.7% | 64.3% | 69.2% | 1.47 s | frozen experiment；early alerts 3；未promote |
 | RK3576 native profile | GMDCSA S4 | 12 | 0 | 12 | 3 | 88.9% | 100% | 80.0% | 80.0% | 88.9% | 1.49 s | frozen；独立 RK3576 traces |
@@ -152,6 +153,16 @@ Subjects 1–3 重训/冻结其时序 profile，再只读 Subject 4 和外部集
 优化后 YOLO11m 相对其旧 deployed 版本：Accuracy +11.1 个百分点、Recall
 +25.0 个百分点、F1 +13.7 个百分点，并消除了本测试集中的全部 Fall 漏报；
 代价是多 1 个 ADL 误报。
+
+最新 YOLOv8m mixed INT8/FP16 与历史 YOLO11m FP16 不是同一个 pose model，
+也不是同一个 precision frontend，因此只能作为工程版本对照，不能作为同模型
+A/B 或精度等价结论。两者都按 S1–2 fit、S3 select、S1–3 refit、S4 27 clips
+test；最新 M 的 calibration/fitting 排除了 S4，但早期失败 M 调试已经观察过
+S4，故最新行标为 regression evidence，不是 pristine one-shot holdout。
+相对历史 YOLO11m FP16，最新 M 的差值为 Accuracy +3.7 pp、Recall −16.7 pp、
+Specificity +20.0 pp、Precision +15.9 pp、F1 +1.3 pp、平均报警延迟 +0.17 s。
+目前没有同流程、同数据冻结的 YOLOv8m FP16 accuracy 结果，只有性能和 RTSP
+sanity。时序 MLP 本身保持 FP32；`INT8 profile` 表示适配对应姿态前端。
 
 ## 时序模型开发集记录
 

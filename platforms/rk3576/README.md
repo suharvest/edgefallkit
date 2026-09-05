@@ -39,7 +39,7 @@ integrated MPP decode/RGA conversion before `appsink`. Compose also mounts the
 host `libgstvideoparsersbad.so` and `libgstcodecparsers-1.0.so.0` ABI for
 `h264parse`/`h265parse`.
 
-Default runtime release: `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3`
+Default runtime release: `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc6`
 (override with `FALL_RK_IMAGE`). Published RepoDigest:
 `sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a`.
 Board-side rc3 pull validation is pending; the measured runs used rc2 digest

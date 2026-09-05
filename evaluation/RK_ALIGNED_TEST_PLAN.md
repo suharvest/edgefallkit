@@ -181,7 +181,7 @@ For example, on RK3576, where `HOST` is
 
 ```bash
 cd /home/cat/edgefallkit-rk3576-test/code/platforms/rk3576
-FALL_RK_IMAGE='sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3' \
+FALL_RK_IMAGE='sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc6' \
 docker compose --profile benchmark run --rm --no-deps \
   -v /home/cat/edgefallkit-rk3576-test/code:/code:ro \
   -v /home/cat/edgefallkit-rk3576-test/models:/models:ro \

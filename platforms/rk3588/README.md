@@ -33,7 +33,7 @@ element. `libgstrockchipmpp.so` links both `librockchip_mpp.so.1` and
 parser plugin and codec-parser library read-only. The preferred backend is
 therefore the verified integrated MPP decode/RGA resize+RGB path to `appsink`.
 
-Default runtime release: `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3`
+Default runtime release: `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc6`
 (override with `FALL_RK_IMAGE`). Published RepoDigest:
 `sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a`.
 Board-side rc3 pull validation is pending; the measured runs used rc2 digest

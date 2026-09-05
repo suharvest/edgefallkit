@@ -245,8 +245,8 @@ are limited to `libstdc++`, `libm`, `libgcc_s` and `libc`. Both boards also
 resolved `rtspsrc`, `rtph264depay`, `h264parse`, `mppvideodec` and `appsink`
 inside the final container.
 
-Release candidate `0.1.0-rc3` is published at
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3`, with
+Release candidate `0.1.0-rc6` is published at
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc6`, with
 registry digest
 `sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a`.
 The arm64 image built on `spark` has local image ID

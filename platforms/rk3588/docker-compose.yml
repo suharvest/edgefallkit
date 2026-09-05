@@ -1,6 +1,6 @@
 services:
   fall-detection:
-    image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2}
+    image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3}
     build:
       context: ../rknn
       args:
@@ -30,7 +30,7 @@ services:
     command: ["app.py", "--config", "/config/config.json"]
   benchmark:
     profiles: ["benchmark"]
-    image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2}
+    image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3}
     network_mode: host
     privileged: true
     tmpfs:

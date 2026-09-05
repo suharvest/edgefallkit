@@ -119,7 +119,7 @@ class ModelPreparationTest(unittest.TestCase):
                      "--accept-upstream-license", "--dry-run", "--no-up")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("verify remote SHA256 or fleet push cat-remote", result.stdout)
-        self.assertIn("fall-detection-rknn:0.1.0-rc2", result.stdout)
+        self.assertIn("fall-detection-rknn:0.1.0-rc3", result.stdout)
         self.assertIn("verify RepoDigests", result.stdout)
         self.assertNotIn("compose up", result.stdout)
 

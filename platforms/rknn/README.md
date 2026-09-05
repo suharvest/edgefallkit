@@ -245,17 +245,20 @@ are limited to `libstdc++`, `libm`, `libgcc_s` and `libc`. Both boards also
 resolved `rtspsrc`, `rtph264depay`, `h264parse`, `mppvideodec` and `appsink`
 inside the final container.
 
-Release candidate `0.1.0-rc1` is published at
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2`.
-Both `cat-remote` and `radxa` pulled it independently and resolved the immutable
-RepoDigest
+Release candidate `0.1.0-rc3` is published at
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3`, with
+registry digest
+`sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a`.
+The arm64 image built on `spark` has local image ID
+`sha256:f1071b58f79d02eae3df58eee89c71766383ba311b5cc30d2e9405b69897240e`
+and inspect size 472,694,512 bytes. A pre-push container smoke imported NumPy,
+OpenCV 4.10.0, GI and the native `rknn_postprocess` extension. Board-side rc3
+pull validation remains pending because both RK boards went offline after the
+performance run.
+
+The preceding rc2 artifact was independently pulled and runtime-smoked on both
+`cat-remote` and `radxa`; its immutable RepoDigest is
 `sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`.
-Registry-pulled inspect reports 258,898,465 bytes. Its ten RootFS layer digests
-match the locally audited artifact; the registry's Docker v2 manifest versus
-the local OCI index accounts for the different top-level ID/size accounting.
-On both boards, `app.py --validate` passed and runtime smoke resolved NumPy,
-OpenCV, GStreamer, the MPP/parser/appsink factories and the native postprocess.
-Neither command started or stopped a production service.
 
 The image deliberately excludes the RKNN pose models. Those models derive from
 Ultralytics YOLO11n-Pose reference weights; redistribution is on **license

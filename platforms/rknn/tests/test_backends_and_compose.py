@@ -114,7 +114,7 @@ class BackendAndComposeTest(unittest.TestCase):
             self.assertEqual(cfg["postprocess"]["backend"], "cpp")
             compose = (root / platform / "docker-compose.yml").read_text()
             self.assertIn("${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/"
-                          "fall-detection-rknn:0.1.0-rc2}", compose)
+                          "fall-detection-rknn:0.1.0-rc3}", compose)
             for library in ("libgstrockchipmpp.so", "libgstvideoparsersbad.so",
                             "libgstcodecparsers-1.0.so.0", "librockchip_mpp.so.1", "librga.so.2"):
                 self.assertIn(library, compose)

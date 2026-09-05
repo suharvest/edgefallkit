@@ -39,8 +39,10 @@ integrated MPP decode/RGA conversion before `appsink`. Compose also mounts the
 host `libgstvideoparsersbad.so` and `libgstcodecparsers-1.0.so.0` ABI for
 `h264parse`/`h265parse`.
 
-Default runtime release: `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2`
-(override with `FALL_RK_IMAGE`). Verified RepoDigest:
+Default runtime release: `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc3`
+(override with `FALL_RK_IMAGE`). Published RepoDigest:
+`sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a`.
+Board-side rc3 pull validation is pending; the measured runs used rc2 digest
 `sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`.
 The external YOLO11n-Pose RKNN file is on license HOLD pending documented
 Ultralytics AGPL-3.0 suitability or a commercial license; it is not in the

@@ -111,3 +111,22 @@ The optimized RC2 was pulled back on RK3576 with RepoDigest
 and inspect size 258,898,465 bytes. `app.py --validate` and the complete runtime
 factory/native-postprocess smoke passed without starting or stopping business
 services. The external pose model is not baked and remains license HOLD.
+
+## Aligned S INT8 RTSP capacity (2026-09-05)
+
+The frozen 640x640 H.264@15 fixture was measured with the MQTT wall-clock
+output contract and competing applications stopped. The Python control path
+uses MPP NV12 followed by CPU color conversion/resize. One route passed all
+three 120-second repetitions: 14.9917, 14.8333 and 15.0083 FPS; inference
+means were 43.315, 43.489 and 43.809 ms, inference P95 was 49.783, 50.564
+and 50.401 ms, and pipeline P95 was 50.137, 50.876 and 50.720 ms. Two routes
+measured 12.8333 and 12.8083 FPS in the first formal repetition, below the
+14.5 FPS/route SLA. Verified starting capacity: **1 x 15 FPS**.
+
+`inference` excludes video preprocessing. `pipeline` starts after source read
+returns and includes inference, pose decode/NMS, tracking, temporal/fall state
+and payload construction; it excludes source read/preprocessing and MQTT send.
+Raw evidence is under
+`/home/harvest/project/edgefallkit-work/rk-aligned-20260903/`; reviewed values
+and artifact hashes are frozen in
+[`../../evaluation/reports/rk-s-int8-aligned-20260905.md`](../../evaluation/reports/rk-s-int8-aligned-20260905.md).

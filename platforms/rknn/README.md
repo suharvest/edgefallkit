@@ -1,8 +1,12 @@
 # Rockchip RKNN shared runtime
 
 This directory is the single implementation shared by RK3576 and RK3588.
-The preferred live path is `rtspsrc -> rtp{h264,h265}depay -> parse ->
-mppvideodec(width/height/format=RGB) -> appsink uint8 -> RKNNLite`. On the
+The staged, source-aligned FP16/INT8 test procedure is documented in
+[evaluation/RK_ALIGNED_TEST_PLAN.md](../../evaluation/RK_ALIGNED_TEST_PLAN.md).
+The single-route compatibility path is `rtspsrc -> rtp{h264,h265}depay -> parse ->
+mppvideodec(width/height/format=RGB) -> appsink uint8 -> RKNNLite`. For
+multi-route production measurements, `mppvideodec` can emit NV12 and the
+current Python path performs color conversion/resize on CPU. On the
 actual `cat-remote` and `radxa` images there is no standalone RGA GStreamer
 element: `libgstrockchipmpp.so` links both `librockchip_mpp.so.1` and
 `librga.so.2`, and `mppvideodec` exposes the resize, RGB conversion and DMA
@@ -160,8 +164,10 @@ to NumPy. The active choices are emitted in startup logs and every MQTT payload
 as `source_backend` and `postprocess_backend`. Per-stream `video` values can
 override global video values. Set `codec=h265` for an HEVC RTSP stream.
 
-The MPP path currently produces the fixed square model canvas directly. The
-measured Spark streams are 640x640, so this is geometry-equivalent. For a
+The MPP RGB path currently produces the fixed square model canvas directly.
+The NV12 path preserves decoder output and performs conversion/resize in
+Python. The measured Spark streams are 640x640, so both are geometry-equivalent.
+For a
 non-square source that must retain letterbox geometry, select
 `backend=opencv_ffmpeg` until a source-dimension-aware RGA pad stage is added;
 do not silently compare stretched coordinates with letterboxed baselines.
@@ -184,8 +190,18 @@ docker compose run --rm benchmark benchmark.py \
 ```
 
 `inference_ms` measures native `rknnlite.inference()` only. `pipeline_ms`
-adds the selected raw-head decode/NMS. RTSP decode latency is measured separately in
-the live MQTT timestamps and must not be conflated with model latency.
+starts after source read returns and includes inference, raw-head decode/NMS,
+tracking, temporal/fall state and payload construction; it excludes source
+read/preprocessing and MQTT transmission. RTSP decode latency is measured
+separately in the live MQTT timestamps and must not be conflated with model
+latency.
+
+The 2026-09-05 aligned RTSP measurements establish S INT8 capacity at 1 route
+on RK3576 and 5 routes on RK3588. A separate RK3588 native hybrid moved
+DMA-BUF→serialized RGA→RKNN `set_io_mem` out of Python and reduced measured CPU
+and RSS, but only checked inference output checksums. It did not execute pose
+decode, tracking, temporal MLP or MQTT and is therefore experimental
+performance-only, not a production-capacity or precision-equivalence result.
 
 The Dockerfile is multi-stage. The compiler, Python headers and pybind11 are
 present only in `builder`; runtime receives only `rknn_postprocess*.so` plus

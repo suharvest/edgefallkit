@@ -1,6 +1,6 @@
 # Cross-platform performance fairness audit
 
-Audited on 2026-09-01. The current 15 FPS RTSP rows prove that a platform can
+Audited on 2026-09-05. The current 15 FPS RTSP rows prove that a platform can
 sustain the source stream; they are not a throughput ranking. Models, output
 heads, quantization and timing boundaries differ, so `pipeline_ms` must not be
 compared without its platform-specific scope.
@@ -23,10 +23,11 @@ compared without its platform-specific scope.
 
 - Jetson `inference_time_ms` includes host/device copies, CUDA preprocessing,
   TensorRT, output copy and CPU parsing; pure TensorRT is reported separately.
-- RK `pipeline_ms` starts after appsink and excludes decode, tracking and MQTT.
-  Its MPP production path stretches non-square input to 640 square while the
-  accuracy extractor letterboxes; this must be aligned before claiming the S4
-  value for non-square production streams.
+- RK `pipeline_ms` starts after source read returns; it includes inference,
+  pose decode/NMS, tracking, temporal/fall state and payload construction, but
+  excludes source read/preprocessing and MQTT transmission. The aligned NV12 production path performs color
+  conversion/resize on CPU. The RK3588 DMA-BUF→serialized RGA→RKNN `set_io_mem`
+  hybrid is a separate performance-only experiment, not a production path.
 - Hailo S and M application probes have different boundaries. S reports
   `pre_hailonet_to_hailonet_src`; M reports
   `appsink_enqueue_to_hailort_completion`. Neither is interchangeable with
@@ -43,7 +44,7 @@ compared without its platform-specific scope.
 |---|---|---|
 | reCamera Pro | RGA NV12→model-size resize plus letterbox before RGB/Python | preprocessing ~40.36 ms vs RKNN ~35.90 ms; reducing preprocessing below 29.3 ms is enough to sustain 15 FPS, and single-digit preprocessing would put compute near 20–23 FPS |
 | Jetson | process-wide shared engine plus per-stream contexts; bounded 2–4 ms microbatch | batch-4 measured 179.94 img/s Nano and 105.96 img/s NX, but current Python ABI is batch-1 |
-| RK3576/3588 | preserve aspect ratio in MPP/RGA path; remove appsink RGB copy; explicit context/core policy | multi-context already gives 1.67× on RK3576 and 2.67× on RK3588; C++ postprocess is not the main bottleneck |
+| RK3576/3588 | move NV12 color/resize from Python into serialized RGA and feed RKNN through registered IO memory; retain Python control plane | RK3588 hybrid sample reduced CPU about 69% and RSS about 68% versus Python/OpenCV, while preserving near-15 FPS; full pose/tracker/MQTT integration remains to be measured |
 | Hailo-8 | correct per-buffer latency pairing, then hardware decode/scale/color and compact C++ result element feeding Python | Hailo core is far above source rate; CPU decode/color/scale is the scaling bottleneck |
 
 Python should remain the control plane for tracking, the tiny MLP, FSM, config
@@ -71,6 +72,9 @@ Publish timing in separate fields:
 - pipeline: the named start/end markers for that platform;
 - output cadence: published frames divided by elapsed time.
 
+For the 2026-09-05 RK result, RTSP output is MQTT fixed wall-clock rate;
+inference excludes video preprocessing; pipeline begins after source read
+returns; hybrid RGA and RKNN timings are independent native-stage intervals.
 Missing intervals are `N/A`, not substituted with a wider or narrower metric.
 Batch latency is latency for the entire batch and must not be divided by batch
 size and relabeled as single-frame latency.

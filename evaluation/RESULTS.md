@@ -1,6 +1,6 @@
 # 摔倒检测成果与对比台账
 
-更新日期：2026-09-02
+更新日期：2026-09-05
 
 本文件记录可横向比较的冻结结果。开发集成绩、最终测试成绩和外部测试
 严格分开；除非表格明确注明，否则不要把开发集数字作为产品准确率。
@@ -20,8 +20,8 @@
 | reCamera SG2002 | CVI Runtime INT8 | N/A（固件/appMgr） | 已实现，待 schema fixture | 已有单路现场基线 | 74.1% Accuracy / 83.3% Recall | 58.8% Recall |
 | reCamera Pro | RKNN | N/A（Pro app packaging） | 已实现；WS 真机字段已采集，MQTT schema fixture 待真机 broker | 已完成单路 live camera/NPU/WebSocket | production fallback 81.5% Accuracy / 91.7% Recall；native experiment 70.4% / 75.0% | N/A（未执行外部集评测） |
 | Jetson Orin Nano/NX | TensorRT 10.3 FP16 | 已有 | 已实现，fixture + 真机多路 RTSP/MQTT payload | 已完成早期 1/2/3/4/6 context、单路 E2E，以及当前 Nano 8 路/NX 9 路 RTSP 边界 | 已完成 | 已完成 |
-| RK3576 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
-| RK3588 | RKNN Runtime | 已有 | 已实现，fixture test | 已完成（含既有 NPU 负载） | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
+| RK3576 | RKNN Runtime | 已有 | 已实现，fixture test | S INT8 RTSP 完成；容量 1 路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
+| RK3588 | RKNN Runtime | 已有 | 已实现，fixture test | S INT8 NV12 RTSP 完成；容量 5 路；hybrid 为实验 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 | Raspberry Pi + Hailo-8 | HailoRT/GStreamer | 已有 | 已实现，fixture + 2,602 条 RTSP 实时消息 | 已完成 synthetic、RTSP 单/双路、S 16 路/M 5 路最大路数与有人跌倒正向链路 | 88.9% Accuracy / 100% Recall（native temporal gate） | N/A（未执行外部集评测） |
 
 ## 2026-09-01 对齐的 YOLOv8 S/M 性能口径
@@ -82,9 +82,46 @@ frontend F1 选参。两台 Orin 独立构建 engine，S4 分类结果一致。�
 holdout。完整证据见
 [`reports/jetson-yolov8m-mixed-20260902.json`](reports/jetson-yolov8m-mixed-20260902.json)。
 
-本轮未刷新 RK3576/RK3588，按测试计划后置。`recamera-pro-test` 多次停在 SSH
-handshake timeout，因此 reCamera Pro 只保留既有现场数据，不填入新的 YOLOv8
-对齐表，也不把旧 YOLO11n 数字冒充本轮结果。
+RK3576/RK3588 的同标准 S INT8 RTSP 结果见下节。`recamera-pro-test` 多次停在
+SSH handshake timeout，因此 reCamera Pro 只保留既有现场数据，不填入新的
+YOLOv8 对齐表，也不把旧 YOLO11n 数字冒充本轮结果。
+
+## Rockchip S INT8 对齐 RTSP 容量（2026-09-05）
+
+两板使用同一固定 640x640 H.264@15 fixture、同一 MQTT fixed wall-clock
+输出判定（每路至少 14.5 FPS），并在测试前停止会争用资源的应用。`output`
+是 MQTT 收到的消息数除以测量墙钟时间；`inference` 只计 RKNN 推理；
+`pipeline` 从 source read 返回后开始，包含推理、pose decode/NMS、tracking、
+时序/跌倒状态与 payload 构建；不含 source read/预处理和 MQTT 发送。
+
+| 设备/路径 | 路数 | 输出 FPS/路 | infer mean | infer P95 | pipeline P95 | 结论 |
+|---|---:|---:|---:|---:|---:|---|
+| RK3576 Python + MPP NV12_CPU | 1 | 14.9917 / 14.8333 / 15.0083 | 43.315 / 43.489 / 43.809 ms | 49.783 / 50.564 / 50.401 ms | 50.137 / 50.876 / 50.720 ms | 3 轮通过 |
+| RK3576 Python + MPP NV12_CPU | 2 | 12.8333 / 12.8083 | 约 51.45 ms | — | — | 首轮失败；容量 1 路 |
+| RK3588 Python + MPP NV12_CPU | 5 | 14.9667–15.0083 | 42.63–43.35 ms | — | 50.28–51.56 ms | 3 轮、每路通过 |
+| RK3588 Python + MPP NV12_CPU | 6 | 14.4333–14.4917 | — | — | — | 首轮失败；容量 5 路 |
+
+NV12_CPU 是 MPP 输出 NV12 后由 OpenCV/NumPy 完成颜色转换和缩放，用于建立
+当前 Python 生产基线。旧的 2026-08-13 RK 表格混合了 FP16、不同输入素材、
+争用状态和非 RTSP context 吞吐，不能与本节替代性排名；旧数据保留在平台
+结果页及本文件历史章节。
+
+### RK3588 hardware-hybrid performance experiment
+
+RK3588 S INT8 五路、4 context 的独立实验把 DMA-BUF→串行 RGA RGB→RKNN
+`set_io_mem` 放入 native stage。3×120 秒均通过；每轮最低 14.9917、最高
+15.0 FPS/路，CPU 43.7467–44.5467%，RSS 157116–157184 KiB，RGA
+0.482–0.490 ms mean / 0.787–0.811 ms P95，RKNN 39.267–39.308 ms mean /
+43.900–44.098 ms P95。对齐 Python/OpenCV 热路径的一次 10+30 秒测量为
+14.9667–15.0 FPS/路、CPU 144.575%、RSS 495488 KiB、RKNNLite
+43.233 ms mean / 51.147 ms P95；按这些样本计算，hybrid CPU 约低 69%、RSS
+约低 68%、RKNN 调用均值约低 9%。
+
+该 hybrid 只读取原生输出 checksum，尚未还原 pose 解码、跟踪、时序模型和
+MQTT contract，因此标记为 `experimental performance-only`。它不能证明
+生产路数、端到端延迟或精度等价；后续需接回完整 Python 控制面后再复测。
+冻结数值与 artifact SHA256 见
+[`reports/rk-s-int8-aligned-20260905.md`](reports/rk-s-int8-aligned-20260905.md)。
 
 ## 历史原生前端台账（不可直接做硬件排名）
 

@@ -112,3 +112,35 @@ The optimized RC2 was pulled back on RK3588 with RepoDigest
 and inspect size 258,898,465 bytes. `app.py --validate` and the complete runtime
 factory/native-postprocess smoke passed without starting or stopping business
 services. The external pose model is not baked and remains license HOLD.
+
+## Aligned S INT8 RTSP capacity (2026-09-05)
+
+The frozen 640x640 H.264@15 fixture was measured with the MQTT wall-clock
+output contract and competing applications stopped. The Python control path
+uses MPP NV12 followed by CPU color conversion/resize. Five routes passed all
+three 120-second repetitions: per-route output ranged from 14.9667 to
+15.0083 FPS, inference means 42.63–43.35 ms, and pipeline P95 50.28–51.56 ms.
+Six routes failed the first formal repetition at 14.4333–14.4917 FPS per
+route. Verified starting capacity: **5 x 15 FPS**.
+
+`inference` excludes video preprocessing. `pipeline` starts after source read
+returns and includes inference, pose decode/NMS, tracking, temporal/fall state
+and payload construction; it excludes source read/preprocessing and MQTT send.
+Raw evidence is under
+`/home/harvest/project/edgefallkit-work/rk-aligned-20260903/`.
+
+### Hardware-hybrid experiment
+
+An independent five-route, four-context experiment moved DMA-BUF to serialized
+RGA RGB and RKNN `set_io_mem` into a native stage. Three 120-second repetitions
+passed at 14.9917–15.0 FPS per route; CPU was 43.7467–44.5467%, RSS
+157116–157184 KiB, RGA 0.482–0.490 ms mean / 0.787–0.811 ms P95, and RKNN
+39.267–39.308 ms mean / 43.900–44.098 ms P95. The aligned Python/OpenCV
+10+30-second sample was 14.9667–15.0 FPS per route, CPU 144.575%, RSS
+495488 KiB, and RKNNLite 43.233 ms mean / 51.147 ms P95.
+
+This native experiment only checked output checksums; it did not restore pose
+decode, tracking, temporal inference or MQTT. It is `experimental
+performance-only`, not production capacity or precision-equivalence evidence.
+Reviewed values and artifact hashes are frozen in
+[`../../evaluation/reports/rk-s-int8-aligned-20260905.md`](../../evaluation/reports/rk-s-int8-aligned-20260905.md).

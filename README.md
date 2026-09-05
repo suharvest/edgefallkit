@@ -112,7 +112,7 @@ Python GI bridge; the exact migration boundary is documented in
 ## Measured results
 
 All figures below are evidence collected on 2026-08-13, 2026-08-20,
-2026-08-30, 2026-09-01, and 2026-09-02. Different models and latency scopes are shown
+2026-08-30, 2026-09-01, 2026-09-02, and 2026-09-05. Different models and latency scopes are shown
 explicitly; see the
 [full results ledger](evaluation/RESULTS.md) before making a capacity or
 accuracy claim.
@@ -123,8 +123,8 @@ accuracy claim.
 |---|---|---:|---:|
 | Orin Nano Super | YOLO11s-Pose TRT FP16 | 8 streams: 14.95 FPS each | 9 streams failed at 13.36 FPS each |
 | Orin NX Super | YOLO11s-Pose TRT FP16 | 9 streams: 14.93 FPS each | 10 streams failed at 13.05 FPS each |
-| RK3576 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.90 FPS | Higher RTSP stream counts not tested |
-| RK3588 | YOLO11n-Pose RKNN FP16 | 1 stream: 14.67 FPS | Higher RTSP stream counts not tested |
+| RK3576 | YOLOv8s-Pose RKNN INT8, MPP NV12 path | 1 stream: 14.83–15.01 FPS (3/3) | 2 streams: 12.81–12.83 FPS; **1 × 15 FPS verified** |
+| RK3588 | YOLOv8s-Pose RKNN INT8, MPP NV12 path | 5 streams: 14.97–15.01 FPS each (3/3) | 6 streams: 14.43–14.49 FPS; **5 × 15 FPS verified** |
 | Pi 5 + Hailo-8 | YOLOv8s-Pose quantized HEF, single context | 16 streams: 14.52–14.57 FPS each | 17 streams failed the 14.5 FPS threshold |
 | Pi 5 + Hailo-8 | YOLOv8m-Pose quantized HEF, 3 contexts | 5 streams: 14.98–15.02 FPS each | 6 streams failed the 14.5 FPS threshold |
 | reCamera Pro | YOLO11n-Pose RKNN INT8 | 1 live camera: 13.05 FPS WebSocket | Higher live loads not tested; 14.5 FPS SLA not met |
@@ -142,6 +142,16 @@ modules; they do not establish YOLO11m multi-stream capacity. Earlier Jetson
 `--infStreams` runs and RK multi-context runs are accelerator-only evidence,
 not RTSP route-count verification. A single tested reCamera Pro source is test
 coverage, not a measured maximum.
+
+The RK rows use the same fixed 640x640 H.264@15 source and MQTT wall-clock
+output contract. `inference_ms` excludes video preprocessing; `pipeline_ms`
+starts when the source read returns. The production Python path uses MPP NV12
+decode plus CPU color conversion/resize. A separate RK3588 hybrid experiment
+moved DMA-BUF→serialized RGA RGB and RKNN `set_io_mem` into a native stage; it
+is performance-only (no pose/tracker/temporal/MQTT output), so its CPU and
+latency reduction must not be promoted to production capacity or precision
+equivalence. The frozen RK measurements and artifact identities are in the
+[aligned RK report](evaluation/reports/rk-s-int8-aligned-20260905.md).
 
 ### Named application timing
 

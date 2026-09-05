@@ -1,6 +1,6 @@
 # Delivery status
 
-Last audited: 2026-09-02 (Asia/Shanghai)
+Last audited: 2026-09-05 (Asia/Shanghai)
 
 This file distinguishes deployable engineering baselines from the remaining
 external-validation work. Jetson, RK3576, RK3588, Hailo-8, SG2002 and Pro now have
@@ -12,8 +12,8 @@ frontend, split and temporal-gate/deployed-state-machine scope.
 | Platform | Runtime and configuration | Deployment mechanism | Required external artifact | Current verification |
 |---|---|---|---|---|
 | Jetson Orin Nano/NX | Complete | slim Docker Compose; published RC3 | target-built SM87/TRT 10.3 pose engine from the explicit-license preparation helper | RC3 registry pull-back on Orin NX, embedded hash and app/config smoke, host TensorRT/CUDA library-load smoke; prior RC2 multi-device and MQTT/RTSP checks retained |
-| RK3576 | Complete | Docker Compose; published RC2 | RK3576 `.rknn` (license HOLD) and native temporal `.npz` | RC2 registry pull-back/config validation, MPP/RGA aspect-fit RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
-| RK3588 | Complete | Docker Compose; published RC2 | RK3588 `.rknn` (license HOLD) and native temporal `.npz` | RC2 registry pull-back/config validation, MPP/RGA aspect-fit RTSP, C++ postprocess, positive path, MQTT contract and frozen S4 verified |
+| RK3576 | Complete | Docker Compose; published RC7 | RK3576 `.rknn` (license HOLD) and native temporal `.npz` | RC7 candidate 3-route/20-second MQTT smoke (900/900 messages observed), MPP/RGA/native bridge and dependency/OOM checks passed |
+| RK3588 | Complete | Docker Compose; published RC7 | RK3588 `.rknn` (license HOLD) and native temporal `.npz` | RC7 candidate 5-route/20-second MQTT smoke (1496/1500 messages observed), MPP/RGA/native bridge and dependency/OOM checks passed |
 | Raspberry Pi 5 + Hailo-8 | Complete | Docker Compose; published RC1 | Hailo-8 `yolov8s_pose.hef` from official URL | registry pull-back, metadata smoke, single/dual RTSP, positive fall path, and MQTT v1 contract verified |
 | reCamera SG2002 | Complete in canonical repository | appMgr `.deb` | packaged CVI model | OS 0.2.2 live deployment, multi-person MQTT, and historical frozen accuracy verified |
 | reCamera Pro | Complete in canonical repository | signed Pro app package | packaged RV1126B RKNN model and production fallback profile | firmware V1.0.4 appMgr install/signature verification, live camera/NPU/WebSocket, 60 s performance and strict native/fallback S4 comparison verified |
@@ -40,11 +40,11 @@ with immutable RepoDigest
 Compose uses this tag by default and supports the `FALL_HAILO_IMAGE` override.
 
 The shared Rockchip ARM64 release is
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2`
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc7`
 with immutable RepoDigest
-`sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`.
-Both RK3576 and RK3588 pulled and validated that digest. Compose resolution
-with `FALL_RK_IMAGE` set to this exact tag passed on both platform files.
+`sha256:8c79172138a0f510e26bd0f219f82b6a57ab98ff30f6828d96786e5131dfeae5`.
+The RC7 candidate passed board-side smoke on both boards; the historical RC2
+digest remains recorded in the aligned performance evidence.
 
 1. Copy or build the platform-specific accelerator artifact described in the
    platform README. TensorRT engines, RKNN files, and HEF files are not
@@ -103,5 +103,6 @@ suitability or a commercial model license is documented.
 - Jetson ONNX restore/export: `platforms/jetson/models/README.md`
 - Hailo fixed HEF download: `platforms/rpi-hailo/scripts/fetch_model.sh`
 - Machine-readable Jetson RC3 manifest: `release/jetson-0.1.0-rc3.json`
+- Machine-readable RKNN RC7 manifest: `release/rknn-0.1.0-rc7.json`
 - Historical multi-platform RC2 manifest: `release/0.1.0-rc2.json`
 - Historical RC1 manifest: `release/0.1.0-rc1.json`

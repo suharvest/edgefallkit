@@ -19,6 +19,21 @@ performs DFL/keypoint decode and NMS. Python retains the tracker, frozen
 temporal MLP, state machines and MQTT contract. OpenCV/FFmpeg plus NumPy remain
 runtime fallbacks, not build-only recovery tools.
 
+RK3576 also has an optional host-native qualification path. It retains MPP
+NV12 DMA-BUF frames and uses RGA to write RGB directly into RKNN-owned input
+memory, while Python continues to schedule streams and run the business logic.
+Select it explicitly with `video.mpp_output_format=dma_nv12` and
+`rknn.backend=native`; `rknn.strict=true` prevents an unmeasured CPU fallback.
+The adapter requires the bundled ARM64 `libhybrid_rga_rknn.so` (which
+`RKNN_NATIVE_LIBRARY` can override), a 640×640 source, and an exact model
+size/SHA identity. The historical RC2 image did not include the bridge and its
+GStreamer stack failed DMA-BUF negotiation; RC7 includes it and its Compose
+profiles align the host GStreamer ABI. The formal host qualification result and
+its limits are recorded in
+[`evaluation/reports/rk-s-int8-aligned-20260905.md`](../../evaluation/reports/rk-s-int8-aligned-20260905.md);
+RC7's separate container smoke establishes deployability, not a repeat of the
+formal capacity or precision evidence.
+
 The output keeps the reCamera MQTT contract (`timestamp` in milliseconds,
 `inference_time_ms`, stream-global `event_id`, aggregate state/counts,
 `features`, `pose17`, and `persons`) and adds `stream_id`, `pipeline_ms` and
@@ -55,7 +70,7 @@ The scripts first validate `models/SHA256SUMS`. A matching pose model is a
 cache hit: no model download or conversion occurs. The small platform-native
 `temporal-rk3576.npz`/`temporal-rk3588.npz` files ship with the project. The
 deployment then uses Fleet to push the pose and temporal artifacts plus config
-and Compose, pulls the immutable RC2 runtime, verifies its RepoDigest, runs
+and Compose, pulls the immutable RC7 runtime, verifies its RepoDigest, runs
 `docker compose config` and `app.py --validate`, and finally runs
 `docker compose up -d`. Add `--no-up` to stop after validation or `--dry-run`
 to print every planned operation.
@@ -157,6 +172,28 @@ The backend policy is explicit in each platform config:
 }
 ```
 
+The measured two-context RK3576 native policy was:
+
+```json
+{
+  "inference_mode": "context_pool",
+  "context_pool_size": 2,
+  "context_core_masks": [1, 2],
+  "video": {
+    "backend": "gstreamer_mpp",
+    "strict": true,
+    "fallback": "none",
+    "mpp_output_format": "dma_nv12"
+  },
+  "rknn": {
+    "backend": "native",
+    "strict": true,
+    "model_size": 15492438,
+    "model_sha256": "1fe0067c615f92509d62b30200f04159b5bb50963a1b798323c50aad6947ca97"
+  }
+}
+```
+
 `strict=true` converts a missing/failing requested backend into a fatal error.
 With the shipped non-strict policy, three empty/error reads switch the stream
 to OpenCV/FFmpeg; a C++ import or call error permanently switches that worker
@@ -203,15 +240,40 @@ and RSS, but only checked inference output checksums. It did not execute pose
 decode, tracking, temporal MLP or MQTT and is therefore experimental
 performance-only, not a production-capacity or precision-equivalence result.
 
+The later RK3576 host-native qualification executes the full post-inference
+application chain and passed three routes in three fixed windows; four routes
+failed at 11.79–11.98 source frames/s. The multi-route implementation uses one
+bounded MQTT publisher worker per stream; a single shared background publisher
+was measured to bottleneck three-route delivery despite inference continuing
+at 15 FPS. It remains
+outside the production capacity above because the formal run used the host
+runtime and its performance fixture contained no accepted person detections.
+
+The same shared host-native code was then qualified on RK3588 with four native
+contexts serving five streams. Three fixed 120-second windows passed at
+14.9917–15.0000 FPS per stream, with inference P95 44.785–45.421 ms and
+pipeline P95 45.574–46.181 ms. All 26,995 schema-valid messages contained
+visible-person and tracking output. Platform differences remain configuration
+and model artifacts rather than separate application implementations. This
+formal result remains host-runtime evidence; RC7 now includes the bridge and
+its separate container smoke establishes packaging and runtime continuity.
+
 The Dockerfile is multi-stage. The compiler, Python headers and pybind11 are
-present only in `builder`; runtime receives only `rknn_postprocess*.so` plus
-NumPy/OpenCV and GStreamer/PyGObject. The default base image, apt source and
+present only in `builder`; runtime receives `rknn_postprocess*.so`, the
+`libhybrid_rga_rknn.so` native bridge, NumPy/OpenCV and GStreamer/PyGObject.
+The default base image, apt source and
 PyPI index use DaoCloud, Tsinghua and Aliyun mirrors respectively. Compose
 mounts the board's verified `libgstrockchipmpp.so`,
 `libgstvideoparsersbad.so`, `libgstcodecparsers-1.0.so.0`,
 `librockchip_mpp.so.1` and `librga.so.2` read-only, alongside the host RKNN
-ABI. Mounting only the H.264/H.265 parser plugin and its codec-parser ABI avoids
-installing the complete Debian `plugins-bad` dependency tree in the image.
+ABI. It also mounts the board's GStreamer 1.22 host ABI
+(`libgstreamer-1.0.so.0`, `libgstbase-1.0.so.0`, `libgstvideo-1.0.so.0`,
+`libgstallocators-1.0.so.0` and `gstreamer-1.0/libgstapp.so`) read-only. The
+container's Debian GStreamer core and the host Rockchip MPP plugin can
+otherwise negotiate different DMA-BUF caps; aligning these libraries keeps the
+`memory:DMABuf` feature available to the native path. Mounting only the
+H.264/H.265 parser plugin and its codec-parser ABI avoids installing the
+complete Debian `plugins-bad` dependency tree in the image.
 
 The earlier 2026-08-13 `linux/arm64` build of `fall-detection-rknn:2.3.0` is
 144,143,406 bytes by the board-side `docker image inspect`; the exact
@@ -245,16 +307,21 @@ are limited to `libstdc++`, `libm`, `libgcc_s` and `libc`. Both boards also
 resolved `rtspsrc`, `rtph264depay`, `h264parse`, `mppvideodec` and `appsink`
 inside the final container.
 
-Release candidate `0.1.0-rc6` is published at
-`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc6`, with
+Release `0.1.0-rc7` is published at
+`sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc7`, with
 registry digest
+`sha256:8c79172138a0f510e26bd0f219f82b6a57ab98ff30f6828d96786e5131dfeae5`.
+The arm64 image built on `spark` has build ID
+`sha256:556c45cc42b6d55ef9b4ac0ab992e6eae8126b7655ce7220b5449b7e229ce30e`
+and inspect size 472,793,364 bytes. It includes the tested native
+DMA-BUF/RGA/RKNN bridge and GStreamer allocator typelib, but no pose model.
+Candidate smoke observed 900/900 MQTT messages across 3 routes on RK3576 and
+1496/1500 across 5 routes on RK3588, with no missing libraries, OOM, or
+non-zero exit. This smoke counted broker messages; schema-valid totals remain
+the separately frozen formal-run evidence above.
+
+The preceding rc6 artifact remains historical evidence:
 `sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a`.
-The arm64 image built on `spark` has local image ID
-`sha256:f1071b58f79d02eae3df58eee89c71766383ba311b5cc30d2e9405b69897240e`
-and inspect size 472,694,512 bytes. A pre-push container smoke imported NumPy,
-OpenCV 4.10.0, GI and the native `rknn_postprocess` extension. Board-side rc3
-pull validation remains pending because both RK boards went offline after the
-performance run.
 
 The preceding rc2 artifact was independently pulled and runtime-smoked on both
 `cat-remote` and `radxa`; its immutable RepoDigest is

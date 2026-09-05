@@ -34,6 +34,7 @@ RUN sed -i -e "${MIRROR_SED}" /etc/apt/sources.list.d/debian.sources \
 COPY --from=gstgir /usr/lib/aarch64-linux-gnu/girepository-1.0/GstVideo-1.0.typelib \
                    /usr/lib/aarch64-linux-gnu/girepository-1.0/GstRtsp-1.0.typelib \
                    /usr/lib/aarch64-linux-gnu/girepository-1.0/GstAudio-1.0.typelib \
+                   /usr/lib/aarch64-linux-gnu/girepository-1.0/GstAllocators-1.0.typelib \
                    /usr/lib/aarch64-linux-gnu/girepository-1.0/GstPbutils-1.0.typelib \
                    /usr/lib/aarch64-linux-gnu/girepository-1.0/GstTag-1.0.typelib \
                    /usr/lib/aarch64-linux-gnu/girepository-1.0/GstSdp-1.0.typelib \
@@ -48,7 +49,10 @@ RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
 
 WORKDIR /opt/fall-detection
 COPY --from=builder /build/rknn_postprocess*.so ./
-COPY app.py benchmark.py fall_core.py rknn_pose.py video_source.py runtime_smoke.py ./
+COPY app.py benchmark.py fall_core.py native_rknn.py rknn_pose.py video_source.py runtime_smoke.py ./
+# Board-specific native acceleration bridge. RKNN runtime and RGA remain host
+# mounts; proprietary headers and vendor libraries are intentionally excluded.
+COPY native/aarch64/libhybrid_rga_rknn.so ./libhybrid_rga_rknn.so
 ENV PYTHONUNBUFFERED=1 PYTHONPATH=/usr/lib/python3/dist-packages
 ENTRYPOINT ["python3"]
 CMD ["app.py", "--config", "/config/config.json"]

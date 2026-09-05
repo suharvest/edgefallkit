@@ -119,7 +119,7 @@ class ModelPreparationTest(unittest.TestCase):
                      "--accept-upstream-license", "--dry-run", "--no-up")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("verify remote SHA256 or fleet push cat-remote", result.stdout)
-        self.assertIn("fall-detection-rknn:0.1.0-rc6", result.stdout)
+        self.assertIn("fall-detection-rknn:0.1.0-rc7", result.stdout)
         self.assertIn("verify RepoDigests", result.stdout)
         self.assertNotIn("compose up", result.stdout)
 
@@ -145,7 +145,7 @@ class ModelPreparationTest(unittest.TestCase):
                 f"echo \"$*\" >> '{log}'\n"
                 "case \"$*\" in *\"docker image inspect\"*) "
                 "echo '[\"sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn@"
-                "sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8\"]';; esac\n")
+                "sha256:8c79172138a0f510e26bd0f219f82b6a57ab98ff30f6828d96786e5131dfeae5\"]';; esac\n")
             fake.chmod(0o755)
             result = run(DEPLOY, "--platform", "rk3588", "--device", "radxa",
                          "--accept-upstream-license", "--offline", "--no-up",

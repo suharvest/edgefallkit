@@ -1,0 +1,33 @@
+RK3588 shared host-native five-route resource snapshot, 2026-09-05
+
+PID=5659
+elapsed_seconds=784
+process_cpu_percent_one_core_100=68.3
+rss_kib=168556
+threads=53
+fd_count=176
+
+device_fds:
+4 /dev/dma_heap/cma
+4 /dev/dma_heap/system
+1 /dev/dri/card1
+5 /dev/mpp_service
+1 /dev/rga
+
+hardware_threads:
+5 mpp_dec_hal
+5 mpp_dec_parser
+
+artifact_sha256:
+d24a3223e41c459df1256931d7e8c29b681328d4ae595085b095fbff4e50aa3d app.py
+ddcaa4eaa30f240532f9dc7e6bae315937c8fc0d35caefda861f8c7960293f05 rknn_pose.py
+8b389ae47b3f2a72497a49e363bdbf54187bd9c6df585efc8e3683e3ba51041c video_source.py
+db7ef956d6c115a1f1ef9494a7d9b6dbfe4f1d842b96384446f09e82de40d99e native_rknn.py
+b13a4fd71e25fdf24281d1a740b03589a09df1ffe53415fa7ba561abd8c6a47b hybrid_rga_rknn.cpp
+9b98f21cb2b4c03a8be92732a5eb9664d34ef85ac9ded4412fa4741973a527be libhybrid_rga_rknn.so
+db3de73c763327215b229323cc94040bb1b72e7f95eaf8e1366a1e35c0e51984 config-n5.json
+3f73273cf1cd20bd145a7ecae24b4511b668b3683044d6b6973bd80abf994a85 yolov8s-pose-rk3588-int8.rknn
+
+lifecycle:
+- The isolated test process was stopped with SIGTERM; final APP_COUNT=0.
+- esk-rk-rtsp-pub, esk-rk-rtsp-server, fall-rtsp-pub and fall-rtsp-server were restored.

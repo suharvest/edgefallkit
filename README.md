@@ -129,6 +129,26 @@ accuracy claim.
 | Pi 5 + Hailo-8 | YOLOv8m-Pose quantized HEF, 3 contexts | 5 streams: 14.98–15.02 FPS each | 6 streams failed the 14.5 FPS threshold |
 | reCamera Pro | YOLO11n-Pose RKNN INT8 | 1 live camera: 13.05 FPS WebSocket | Higher live loads not tested; 14.5 FPS SLA not met |
 
+An RK3576 **host-native qualification path** subsequently passed three streams
+in all three 120-second repetitions at 14.92–15.11 FPS per stream, with
+inference P95 43.77–44.20 ms and pipeline P95 44.28–44.73 ms. Four streams
+failed: source-frame rates were only 11.79–11.98 FPS. The path executes pose
+decode, tracking, temporal logic and MQTT schema generation, but the frozen
+fixture yielded no visible-person outputs. The RC2 image used for the earlier
+production row could not negotiate this DMA-BUF input; RC7 now packages the
+bridge and passed a separate three-route container smoke. The host qualification
+is still recorded separately because that smoke does not replace its formal
+three-repetition evidence. See the
+[RK3576 native qualification](evaluation/reports/rk-s-int8-aligned-20260905.md#rk3576-native-production-chain-qualification).
+
+The same shared host-native implementation passed the RK3588 five-stream load
+in all three 120-second repetitions at 14.99–15.00 FPS per stream. Inference
+P95 was 44.79–45.42 ms and pipeline P95 was 45.57–46.18 ms. All 26,995 MQTT
+messages passed schema validation and contained visible-person/tracking output.
+The result confirms code-path reuse across RK3576/RK3588. RC7 now contains the
+native bridge and passed a separate five-route container smoke, but that smoke
+does not replace the formal host-runtime row. See the [aligned RK report](evaluation/reports/rk-s-int8-aligned-20260905.md#rk3588-shared-native-production-chain-qualification).
+
 The 15 FPS rows are source-rate SLA checks, not a hardware ranking. They do not
 mix accelerator, application-inference, pipeline, or output-interval timing in
 one column. Timing boundaries and known risks are documented in the
@@ -326,7 +346,7 @@ and [M](evaluation/reports/rpi-hailo8-yolov8m-pose-20260830.json) reports.
 | Runtime | Published image | Immutable RepoDigest |
 |---|---|---|
 | Jetson | `sensecraft-missionpack.seeed.cn/solution/fall-detection-jetson:0.1.0-rc3` | `sha256:a7253a5d8689607e722f9ee42c455665441ae4c553de4275605cca59ed0e01db` |
-| RKNN | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc6` | `sha256:b74bbe9540bbc950f3ea3e7bb1725decab86b81af35f389cd22af6ee94783d4a` |
+| RKNN | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc7` | `sha256:8c79172138a0f510e26bd0f219f82b6a57ab98ff30f6828d96786e5131dfeae5` |
 | Hailo | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc3` | `sha256:994b363dc1aa68d3ada0ca3590bd810ab26a2240918bcffe426104761a2f772a` |
 
 All three are Linux/ARM64. The Jetson RC3 image was pulled back on Orin NX;
@@ -486,5 +506,6 @@ versions and provenance.
 
 Release history is recorded in [CHANGELOG.md](CHANGELOG.md).
 The immutable container references for this release are also available in the
-[Jetson RC3 manifest](release/jetson-0.1.0-rc3.json); earlier multi-platform
+[Jetson RC3 manifest](release/jetson-0.1.0-rc3.json) and
+[RKNN RC7 manifest](release/rknn-0.1.0-rc7.json); earlier multi-platform
 baselines remain in the historical RC manifests.

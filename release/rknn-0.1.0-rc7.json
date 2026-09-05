@@ -1,0 +1,17 @@
+{
+  "release": "0.1.0-rc7",
+  "platform": "rk3576-rk3588",
+  "image": "sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc7",
+  "repo_digest": "sha256:8c79172138a0f510e26bd0f219f82b6a57ab98ff30f6828d96786e5131dfeae5",
+  "architecture": "linux/arm64",
+  "spark_build_id": "sha256:556c45cc42b6d55ef9b4ac0ab992e6eae8126b7655ce7220b5449b7e229ce30e",
+  "inspect_size_bytes": 472793364,
+  "candidate_archive_sha256": "8d27afd49b2fa7fa40646bfb85d4b7188fdd88eb7b318252dc6a2acaf6bec09e",
+  "profile": "640x640 native",
+  "pose_model_included": false,
+  "accuracy_equivalence_claim": false,
+  "validation": {
+    "rk3576": {"routes": 3, "duration_seconds": 20, "mqtt_messages_observed": 900, "mqtt_expected": 900, "exit_code": 0},
+    "rk3588": {"routes": 5, "duration_seconds": 20, "mqtt_messages_observed": 1496, "mqtt_expected": 1500, "exit_code": 0}
+  }
+}

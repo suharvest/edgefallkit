@@ -1,6 +1,6 @@
 # Evaluation material inventory
 
-Last verified: 2026-09-02 (Asia/Shanghai)
+Last verified: 2026-09-05 (Asia/Shanghai)
 
 Large evaluation material is not stored in this source project. Orin Nano is
 the evaluated working/debug machine; Spark is the durable backup.
@@ -17,7 +17,7 @@ the evaluated working/debug machine; Spark is the durable backup.
 | RK LAN E2E raw MQTT/summary | Mac `/private/tmp/rk*-spark-*` | `/home/harvest/datasets/fall-detection/evaluation/rk-e2e/20260813/` |
 | RK3576 GMDCSA working copy/traces | `cat-remote:/home/cat/fall-detection-data/{gmdcsa24,traces/rk3576}` | traces `/home/harvest/datasets/fall-detection/traces/rk3576/`; profile/reports `/home/harvest/datasets/fall-detection/rk-training/rk3576/` |
 | RK3588 GMDCSA working copy/traces | `radxa:/home/radxa/fall-detection-data/{gmdcsa24,traces/rk3588}` | traces `/home/harvest/datasets/fall-detection/traces/rk3588/`; profile/reports `/home/harvest/datasets/fall-detection/rk-training/rk3588/` |
-| RK shared ARM64 runtime image | local source `fall-detection-rknn:2.5.0` on RK3588 | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2` |
+| RK shared ARM64 runtime image | Spark ARM64 build ID `sha256:556c45cc42b6d55ef9b4ac0ab992e6eae8126b7655ce7220b5449b7e229ce30e` | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc7` |
 | Hailo-8 YOLOv8s-Pose 160 traces | Pi temporary extraction tree `/tmp/hailo-gmdcsa-traces/` | `/home/harvest/datasets/fall-detection/traces/hailo8-yolov8s-pose/` |
 | Hailo-8 frozen temporal profile/reports | local small copies under `evaluation/reports/` | `/home/harvest/datasets/fall-detection/profiles/hailo8-yolov8s-pose-v1/` |
 | Hailo-8 ARM64 runtime image | `fall-detection-rpi-hailo:4.21` build source on Pi | `sensecraft-missionpack.seeed.cn/solution/fall-detection-rpi-hailo:0.1.0-rc1` |
@@ -158,10 +158,10 @@ and require SHA256
 `e19856699ed47cf866d23265827f960b263f287dab5e54e82c7ce37e12525a2d`.
 The project does not re-host or assert redistribution rights for that HEF.
 
-The published RK runtime was independently pulled on `cat-remote` and `radxa`.
-Both resolve RepoDigest
-`sha256:43d767f5927e6a4ebc00013c24ebd9f10c692c9aa0d7615520a4823d6367ffa8`;
-registry-pulled inspect reports 258,898,465 bytes. The container contains no
+The published RC7 RK runtime was independently smoke-tested on `cat-remote`
+and `radxa`. It resolves RepoDigest
+`sha256:8c79172138a0f510e26bd0f219f82b6a57ab98ff30f6828d96786e5131dfeae5`;
+inspect reports 472,793,364 bytes. The container contains no
 RKNN pose model. Its external RK3576/RK3588 model files derive from
 Ultralytics YOLO11n-Pose reference weights and are on **license HOLD**: do not
 publish them until AGPL-3.0 suitability or a commercial license is documented.

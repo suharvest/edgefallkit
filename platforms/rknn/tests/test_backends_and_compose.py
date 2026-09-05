@@ -114,9 +114,13 @@ class BackendAndComposeTest(unittest.TestCase):
             self.assertEqual(cfg["postprocess"]["backend"], "cpp")
             compose = (root / platform / "docker-compose.yml").read_text()
             self.assertIn("${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/"
-                          "fall-detection-rknn:0.1.0-rc6}", compose)
+                          "fall-detection-rknn:0.1.0-rc7}", compose)
             for library in ("libgstrockchipmpp.so", "libgstvideoparsersbad.so",
                             "libgstcodecparsers-1.0.so.0", "librockchip_mpp.so.1", "librga.so.2"):
+                self.assertIn(library, compose)
+            for library in ("libgstreamer-1.0.so.0", "libgstbase-1.0.so.0",
+                            "libgstvideo-1.0.so.0", "libgstallocators-1.0.so.0",
+                            "gstreamer-1.0/libgstapp.so"):
                 self.assertIn(library, compose)
             # Keep the GStreamer registry ephemeral: a stale image-layer
             # registry must not mask the host-mounted MPP plugin.
@@ -133,6 +137,19 @@ class BackendAndComposeTest(unittest.TestCase):
         self.assertNotIn("pybind11", runtime)
         self.assertNotIn("Dockerfile.model-builder", runtime)
         self.assertNotIn("export_pose_rawhead_onnx.py", runtime)
+
+    def test_runtime_image_contains_native_hotpath_assets(self):
+        dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text()
+        self.assertIn("GstAllocators-1.0.typelib", dockerfile)
+        self.assertIn("COPY app.py benchmark.py fall_core.py native_rknn.py", dockerfile)
+        self.assertIn("native/aarch64/libhybrid_rga_rknn.so", dockerfile)
+        native_root = Path(__file__).parents[1] / "native"
+        source = (native_root / "src/hybrid_rga_rknn.cpp").read_text()
+        self.assertIn('#include "rknn_api.h"', source)
+        self.assertFalse((native_root / "rknn_api.h").exists())
+        self.assertFalse((native_root / "librknnrt.so").exists())
+        manifest = (native_root / "SHA256SUMS").read_text()
+        self.assertIn("src/hybrid_rga_rknn.cpp", manifest)
 
 
 if __name__ == "__main__":

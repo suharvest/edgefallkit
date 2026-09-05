@@ -3,10 +3,12 @@ import sys
 import unittest
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from video_source import (FallbackVideoSource, aspect_fit_geometry,
+                          copy_strided_nv12_to_letterbox,
                           copy_strided_rgb_to_letterbox, pad_scaled_rgb,
                           validate_backend_config)
 
@@ -68,6 +70,25 @@ class BackendAndComposeTest(unittest.TestCase):
         self.assertTrue(np.all(canvas[:2] == 114))
         self.assertTrue(np.all(canvas[5:] == 114))
 
+    def test_strided_nv12_is_converted_to_owned_rgb_letterbox(self):
+        width, height, y_stride, uv_stride = 4, 2, 8, 8
+        y_offset, uv_offset = 3, 3 + y_stride * height
+        mapped = bytearray(uv_offset + uv_stride * (height // 2))
+        y = np.ndarray((height, width), dtype=np.uint8, buffer=mapped,
+                       offset=y_offset, strides=(y_stride, 1))
+        uv = np.ndarray((height // 2, width // 2, 2), dtype=np.uint8,
+                        buffer=mapped, offset=uv_offset,
+                        strides=(uv_stride, 2, 1))
+        y[:] = 100; uv[:] = 128
+        expected = cv2.cvtColorTwoPlane(y, uv, cv2.COLOR_YUV2RGB_NV12).copy()
+        canvas = copy_strided_nv12_to_letterbox(
+            mapped, width, height, y_stride, uv_stride,
+            y_offset, uv_offset, size=4)
+        mapped[:] = b"\x00" * len(mapped)
+        np.testing.assert_array_equal(canvas[1:3, :], expected)
+        self.assertTrue(np.all(canvas[:1] == 114))
+        self.assertTrue(np.all(canvas[3:] == 114))
+
     def test_video_fallback_after_configured_failures(self):
         primary = FakeSource("gstreamer_mpp", [None, None])
         fallback = FakeSource("opencv_ffmpeg", ["frame"])
@@ -97,6 +118,11 @@ class BackendAndComposeTest(unittest.TestCase):
             for library in ("libgstrockchipmpp.so", "libgstvideoparsersbad.so",
                             "libgstcodecparsers-1.0.so.0", "librockchip_mpp.so.1", "librga.so.2"):
                 self.assertIn(library, compose)
+            # Keep the GStreamer registry ephemeral: a stale image-layer
+            # registry must not mask the host-mounted MPP plugin.
+            self.assertEqual(compose.count("- /root/.cache"), 2)
+            self.assertIn("fall-detection:\n", compose)
+            self.assertIn("benchmark:\n", compose)
 
     def test_runtime_image_contains_only_built_extension(self):
         dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text()

@@ -10,6 +10,8 @@ services:
     network_mode: host
     privileged: true
     restart: unless-stopped
+    tmpfs:
+      - /root/.cache
     devices:
       - "/dev/dri:/dev/dri"
     volumes:
@@ -19,6 +21,7 @@ services:
       - /lib/aarch64-linux-gnu/librockchip_mpp.so.1:/lib/aarch64-linux-gnu/librockchip_mpp.so.1:ro
       - /lib/aarch64-linux-gnu/librga.so.2:/lib/aarch64-linux-gnu/librga.so.2:ro
       - /usr/lib/librknnrt.so:/usr/lib/librknnrt.so:ro
+      - /usr/lib/python3/dist-packages/gi:/usr/local/lib/python3.11/site-packages/gi:ro
       - /home/cat/.local/lib/python3.11/site-packages/rknnlite:/usr/local/lib/python3.11/site-packages/rknnlite:ro
       - /home/cat/.local/lib/python3.11/site-packages/ruamel:/usr/local/lib/python3.11/site-packages/ruamel:ro
       - /home/cat/.local/lib/python3.11/site-packages/psutil:/usr/local/lib/python3.11/site-packages/psutil:ro
@@ -30,6 +33,8 @@ services:
     image: ${FALL_RK_IMAGE:-sensecraft-missionpack.seeed.cn/solution/fall-detection-rknn:0.1.0-rc2}
     network_mode: host
     privileged: true
+    tmpfs:
+      - /root/.cache
     devices:
       - "/dev/dri:/dev/dri"
     volumes:
@@ -39,6 +44,7 @@ services:
       - /lib/aarch64-linux-gnu/librockchip_mpp.so.1:/lib/aarch64-linux-gnu/librockchip_mpp.so.1:ro
       - /lib/aarch64-linux-gnu/librga.so.2:/lib/aarch64-linux-gnu/librga.so.2:ro
       - /usr/lib/librknnrt.so:/usr/lib/librknnrt.so:ro
+      - /usr/lib/python3/dist-packages/gi:/usr/local/lib/python3.11/site-packages/gi:ro
       - /home/cat/.local/lib/python3.11/site-packages/rknnlite:/usr/local/lib/python3.11/site-packages/rknnlite:ro
       - /home/cat/.local/lib/python3.11/site-packages/ruamel:/usr/local/lib/python3.11/site-packages/ruamel:ro
       - /home/cat/.local/lib/python3.11/site-packages/psutil:/usr/local/lib/python3.11/site-packages/psutil:ro

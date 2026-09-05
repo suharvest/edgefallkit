@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 import cv2
 import numpy as np
+
+
+_GST_MAP_LOCK = threading.Lock()
 
 
 def aspect_fit_geometry(source_w: int, source_h: int, size: int = 640):
@@ -41,6 +45,31 @@ def copy_strided_rgb_to_letterbox(data, width: int, height: int, stride: int,
     borrowed = np.ndarray((height, width, 3), dtype=np.uint8, buffer=data,
                           strides=(stride, 3, 1))
     return pad_scaled_rgb(borrowed, size, color)
+
+
+def copy_strided_nv12_to_letterbox(data, width: int, height: int,
+                                   y_stride: int, uv_stride: int,
+                                   y_offset: int, uv_offset: int,
+                                   size: int = 640, color: int = 114):
+    """Convert mapped, strided NV12 into an owned RGB letterbox image."""
+    if width <= 0 or height <= 0 or width % 2 or height % 2:
+        raise ValueError("NV12 dimensions must be positive and even")
+    if y_stride < width or uv_stride < width or y_offset < 0 or uv_offset < 0:
+        raise ValueError("invalid mapped NV12 strides or offsets")
+    required = max(y_offset + y_stride * height,
+                   uv_offset + uv_stride * (height // 2))
+    if len(data) < required:
+        raise ValueError("mapped NV12 buffer is shorter than its negotiated layout")
+    y_plane = np.ndarray((height, width), dtype=np.uint8, buffer=data,
+                         offset=y_offset, strides=(y_stride, 1))
+    uv_plane = np.ndarray((height // 2, width // 2, 2), dtype=np.uint8,
+                          buffer=data, offset=uv_offset,
+                          strides=(uv_stride, 2, 1))
+    rgb = cv2.cvtColorTwoPlane(y_plane, uv_plane, cv2.COLOR_YUV2RGB_NV12)
+    scaled_w, scaled_h, _, _ = aspect_fit_geometry(width, height, size)
+    if (scaled_w, scaled_h) != (width, height):
+        rgb = cv2.resize(rgb, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
+    return pad_scaled_rgb(rgb, size, color)
 
 
 class FFmpegRTSP:
@@ -80,13 +109,14 @@ class FFmpegRTSP:
 
 
 class GStreamerMPP:
-    """GStreamer RTSP -> Rockchip MPP decoder (linked to librga) -> RGB appsink."""
+    """GStreamer RTSP -> Rockchip MPP decoder -> RGB model input."""
 
     backend_name = "gstreamer_mpp"
 
     def __init__(self, url: str, size: int = 640, transport: str = "tcp",
                  codec: str = "h264", latency_ms: int = 100,
-                 appsink_timeout_ms: int = 2000, appsink_queue: int = 3, **_):
+                 appsink_timeout_ms: int = 2000, appsink_queue: int = 3,
+                 mpp_output_format: str = "rgb", **_):
         self.url = url
         self.size = size
         self.transport = transport
@@ -94,6 +124,9 @@ class GStreamerMPP:
         self.latency_ms = latency_ms
         self.timeout_ns = int(appsink_timeout_ms) * 1_000_000
         self.appsink_queue = max(1, int(appsink_queue))
+        self.output_format = str(mpp_output_format).lower()
+        if self.output_format not in ("rgb", "nv12_cpu"):
+            raise ValueError("mpp_output_format must be rgb or nv12_cpu")
         self.pipeline = self.sink = self.bus = None
         self.Gst = None
         self.GstVideo = None
@@ -138,9 +171,10 @@ class GStreamerMPP:
         # dimensions, which is safe and handled by the read-side fallback.
         decoder.set_property("width", 0)
         decoder.set_property("height", 0)
-        decoder.set_property("format", 15)  # GstMppVideoDecFormat RGB, verified on both boards.
+        decoder.set_property("format", 23 if self.output_format == "nv12_cpu" else 15)
         capsfilter.set_property("caps", Gst.Caps.from_string(
-            "video/x-raw,format=RGB"))
+            "video/x-raw,format=NV12" if self.output_format == "nv12_cpu"
+            else "video/x-raw,format=RGB"))
         sink.set_property("sync", False)
         # Depth 1 means read() can only ever hand back the frame that arrives
         # next: finish early and it waits, finish late and that frame was
@@ -165,7 +199,8 @@ class GStreamerMPP:
                 return Gst.PadProbeReturn.OK
             ok_w, source_w = structure.get_int("width")
             ok_h, source_h = structure.get_int("height")
-            if ok_w and ok_h and source_w > 0 and source_h > 0:
+            if (self.output_format == "rgb" and ok_w and ok_h and
+                    source_w > 0 and source_h > 0):
                 scaled_w, scaled_h, _, _ = aspect_fit_geometry(
                     source_w, source_h, self.size)
                 decoder.set_property("width", scaled_w)
@@ -224,33 +259,42 @@ class GStreamerMPP:
         caps = sample_caps.get_structure(0)
         width, height = int(caps.get_value("width")), int(caps.get_value("height"))
         buffer = sample.get_buffer()
-        ok, mapped = buffer.map(self.Gst.MapFlags.READ)
-        if not ok:
-            raise RuntimeError("failed to map GStreamer appsink buffer")
-        try:
-            # Respect the negotiated row stride.  MPP/RGA often aligns RGB
-            # rows, so treating the buffer as tightly packed can shear pixels.
-            video_info = self.GstVideo.VideoInfo.new_from_caps(sample_caps)
-            stride = int(video_info.stride[0])
-            if stride < width * 3 or len(mapped.data) < stride * height:
-                raise RuntimeError("invalid RGB stride from mppvideodec")
-            mapped_rgb = np.ndarray((height, width, 3), dtype=np.uint8,
-                                    buffer=mapped.data, strides=(stride, 3, 1))
-            if width <= self.size and height <= self.size:
-                # One required copy: directly from borrowed Gst memory into the
-                # owned letterbox canvas.  No mapped view escapes buffer.unmap().
-                frame = copy_strided_rgb_to_letterbox(
-                    mapped.data, width, height, stride, self.size)
-            else:
-                # Some streams omit coded dimensions in parser CAPS.  Preserve
-                # correctness by software aspect-fit instead of stretching.
-                scaled_w, scaled_h, _, _ = aspect_fit_geometry(
-                    width, height, self.size)
-                scaled = cv2.resize(mapped_rgb, (scaled_w, scaled_h),
-                                    interpolation=cv2.INTER_LINEAR)
-                frame = pad_scaled_rgb(scaled, self.size)
-        finally:
-            buffer.unmap(mapped)
+        # PyGObject's MapInfo property access is not reliable when several
+        # appsinks map concurrently. Keep the borrowed-memory window short and
+        # process-local; the returned frame always owns its storage.
+        with _GST_MAP_LOCK:
+            ok, mapped = buffer.map(self.Gst.MapFlags.READ)
+            if not ok:
+                raise RuntimeError("failed to map GStreamer appsink buffer")
+            try:
+                video_info = self.GstVideo.VideoInfo.new_from_caps(sample_caps)
+                mapped_data = mapped.data
+                if self.output_format == "nv12_cpu":
+                    frame = copy_strided_nv12_to_letterbox(
+                        mapped_data, width, height,
+                        int(video_info.stride[0]), int(video_info.stride[1]),
+                        int(video_info.offset[0]), int(video_info.offset[1]),
+                        self.size)
+                else:
+                    # Respect aligned RGB rows. The decoder has already used
+                    # RGA for aspect-fit unless source CAPS lacked dimensions.
+                    stride = int(video_info.stride[0])
+                    if stride < width * 3 or len(mapped_data) < stride * height:
+                        raise RuntimeError("invalid RGB stride from mppvideodec")
+                    mapped_rgb = np.ndarray((height, width, 3), dtype=np.uint8,
+                                            buffer=mapped_data,
+                                            strides=(stride, 3, 1))
+                    if width <= self.size and height <= self.size:
+                        frame = copy_strided_rgb_to_letterbox(
+                            mapped_data, width, height, stride, self.size)
+                    else:
+                        scaled_w, scaled_h, _, _ = aspect_fit_geometry(
+                            width, height, self.size)
+                        scaled = cv2.resize(mapped_rgb, (scaled_w, scaled_h),
+                                            interpolation=cv2.INTER_LINEAR)
+                        frame = pad_scaled_rgb(scaled, self.size)
+            finally:
+                buffer.unmap(mapped)
         return frame
 
     def close(self):

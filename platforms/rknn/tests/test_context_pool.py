@@ -10,8 +10,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 import app as app_module
+import native_rknn
 from app import (CapturedFrame, ContextPoolRuntime, LatestFrameQueue,
-                 StreamWorker, resolve_context_core_masks, resolve_legacy_core_mask)
+                 MqttPublisher, StreamWorker, close_publishers,
+                 make_stream_publishers, resolve_context_core_masks,
+                 resolve_legacy_core_mask)
+from video_source import NativeFrame, frame_canvas, validate_backend_config
 
 
 class ContextPoolTest(unittest.TestCase):
@@ -100,6 +104,113 @@ class ContextPoolTest(unittest.TestCase):
         self.assertEqual(q.dropped, 2)
         self.assertEqual(q.get().timestamp, newest.timestamp)
         self.assertEqual(q.get(), None)
+
+    def test_latest_queue_releases_dropped_and_closed_native_frames(self):
+        class Sample: pass
+        first = NativeFrame(Sample(), visible_width=640, visible_height=640,
+                            visible_rect=(0, 0, 640, 640))
+        second = NativeFrame(Sample(), visible_width=640, visible_height=640,
+                             visible_rect=(0, 0, 640, 640))
+        q = LatestFrameQueue()
+        self.assertTrue(q.put(CapturedFrame(first, 1, 0, 1)))
+        self.assertTrue(q.put(CapturedFrame(second, 2, 0, 2)))
+        self.assertTrue(first.closed)
+        self.assertFalse(second.closed)
+        q.close()
+        self.assertTrue(second.closed)
+        self.assertFalse(q.put(CapturedFrame(first, 3, 0, 3)))
+        self.assertEqual(frame_canvas(second), (640, 640))
+
+    def test_mqtt_publisher_is_async_and_closes_after_drain(self):
+        sent = []
+        with patch.object(MqttPublisher, "_send", side_effect=lambda *item: sent.append(item)):
+            publisher = MqttPublisher({"host": "unused", "queue_size": 8})
+            publisher.publish("topic/a", {"frame_id": 1})
+            publisher.publish("topic/b", {"frame_id": 2})
+            publisher.close(timeout=1)
+        self.assertEqual(sent, [("topic/a", {"frame_id": 1}),
+                                ("topic/b", {"frame_id": 2})])
+        self.assertFalse(publisher.thread.is_alive())
+        with self.assertRaisesRegex(RuntimeError, "closed"):
+            publisher.publish("topic/c", {})
+
+    def test_mqtt_background_failure_is_reported_on_close(self):
+        with patch.object(MqttPublisher, "_send", side_effect=ValueError("encode failed")):
+            publisher = MqttPublisher({"host": "unused", "queue_size": 8})
+            publisher.publish("topic/a", {"frame_id": 1})
+            with self.assertRaisesRegex(RuntimeError, "publisher failed"):
+                publisher.close(timeout=1)
+        self.assertIsInstance(publisher.exception, ValueError)
+        self.assertFalse(publisher.thread.is_alive())
+
+    def test_mqtt_close_excludes_late_publish(self):
+        entered = threading.Event(); release = threading.Event(); closed = []
+        def send(*_): entered.set(); release.wait(1)
+        with patch.object(MqttPublisher, "_send", side_effect=send):
+            publisher = MqttPublisher({"host": "unused", "queue_size": 8})
+            publisher.publish("topic/a", {"frame_id": 1})
+            self.assertTrue(entered.wait(.5))
+            closer = threading.Thread(target=lambda: (publisher.close(), closed.append(True)))
+            closer.start()
+            self.assertTrue(publisher.stop_event.wait(.5))
+            with self.assertRaisesRegex(RuntimeError, "closed"):
+                publisher.publish("topic/b", {"frame_id": 2})
+            release.set(); closer.join(1)
+        self.assertEqual(closed, [True])
+        self.assertTrue(publisher.outbox.empty())
+
+    def test_stream_publishers_use_independent_client_ids_and_all_close(self):
+        created = []
+        class Publisher:
+            def __init__(self, cfg): self.cfg = cfg; self.closed = False; created.append(self)
+            def close(self): self.closed = True
+        with patch.object(app_module, "MqttPublisher", Publisher):
+            publishers = make_stream_publishers(
+                {"host": "broker", "client_id": "edgefall"},
+                [{"id": "cam-1"}, {"id": "cam-2"}, {"id": "cam-3"}])
+        self.assertEqual([publishers[key].cfg["client_id"] for key in publishers],
+                         ["edgefall-cam-1", "edgefall-cam-2", "edgefall-cam-3"])
+        self.assertEqual(len({id(value) for value in publishers.values()}), 3)
+        close_publishers(publishers)
+        self.assertTrue(all(publisher.closed for publisher in created))
+
+    def test_dma_backend_requires_strict_native_pair(self):
+        base = {"video": {"backend": "gstreamer_mpp", "mpp_output_format": "dma_nv12",
+                           "strict": True, "fallback": "none"},
+                "rknn": {"backend": "native", "strict": True}}
+        validate_backend_config(base)
+        for rknn in ({"backend": "legacy", "strict": True},
+                     {"backend": "native", "strict": False},
+                     {"backend": "typo", "strict": True}):
+            config = dict(base); config["rknn"] = rknn
+            with self.assertRaises(ValueError):
+                validate_backend_config(config)
+
+    def test_native_runtime_destroys_handle_when_contract_validation_fails(self):
+        class Function:
+            def __init__(self, result=None): self.result = result
+            def __call__(self, *_): return self.result
+        class Recorder(Function):
+            def __init__(self, output): super().__init__(); self.output = output
+            def __call__(self, value): self.output.append(value)
+        class Library:
+            def __init__(self):
+                self.hybrid_last_error = Function(b"bad outputs")
+                self.hybrid_create = Function(123)
+                self.hybrid_model_width = Function(640)
+                self.hybrid_model_height = Function(640)
+                self.hybrid_output_count = Function(0)
+                self.hybrid_output_ndims = Function(0)
+                self.hybrid_output_dim = Function(0)
+                self.hybrid_output_elems = Function(0)
+                self.hybrid_infer_pose_nv12_fd = Function(0)
+                self.destroyed = []
+                self.hybrid_destroy = Recorder(self.destroyed)
+        library = Library()
+        with patch.object(native_rknn.ctypes, "CDLL", return_value=library):
+            with self.assertRaisesRegex(RuntimeError, "exactly 9 outputs"):
+                native_rknn.NativeRuntime("model.rknn")
+        self.assertEqual(library.destroyed, [123])
 
     def test_round_robin_fairness_and_cleanup(self):
         streams = [{"id": "a"}, {"id": "b"}, {"id": "c"}]

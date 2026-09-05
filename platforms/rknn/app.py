@@ -2,13 +2,13 @@
 """Multi-RTSP RKNN fall detector with hardware video and postprocess fallbacks."""
 from __future__ import annotations
 
-import argparse, json, os, signal, socket, ssl, struct, threading, time
+import argparse, json, os, queue, signal, socket, ssl, struct, threading, time
 from dataclasses import dataclass
 from pathlib import Path
 
 from fall_core import Detection, FallConfig, FallDetector, IoUTracker, TemporalMLP, make_observation
 from rknn_pose import PoseDecoder, RKNNPose
-from video_source import create_video_source, validate_backend_config
+from video_source import create_video_source, frame_canvas, validate_backend_config
 
 RUNNING = True
 
@@ -34,9 +34,11 @@ class LatestFrameQueue:
     def put(self, item):
         with self._cv:
             if self.closed:
+                _close_frame(item)
                 return False
             if self._item is not None:
                 self.dropped += 1
+                _close_frame(self._item)
             self._item = item
             self._cv.notify()
             return True
@@ -51,8 +53,17 @@ class LatestFrameQueue:
     def close(self):
         with self._cv:
             self.closed = True
-            self._item = None
+            item, self._item = self._item, None
             self._cv.notify_all()
+        _close_frame(item)
+
+
+def _close_frame(item):
+    frame = getattr(item, "frame", item)
+    close = getattr(frame, "close", None)
+    if close is not None:
+        try: close()
+        except Exception: pass
 
 
 def resolve_context_core_masks(config, context_count):
@@ -178,6 +189,7 @@ class ContextPoolRuntime:
                 try:
                     self.frame_handler(stream, model, item)
                 finally:
+                    _close_frame(item)
                     with self._lock: self._busy.discard(stream["id"])
         except BaseException as exc:
             self._fail(exc)
@@ -265,37 +277,130 @@ def _mqtt_string(value: str) -> bytes:
 class MqttPublisher:
     """Small MQTT 3.1.1 QoS0 client, avoiding paho in the deployment image."""
     def __init__(self, cfg):
-        self.cfg = cfg; self.sock = None; self.lock = threading.Lock()
+        self.cfg = cfg; self.sock = None
+        self.outbox = queue.Queue(maxsize=max(8, int(cfg.get("queue_size", 256))))
+        self.stop_event = threading.Event(); self.exception = None
+        self.state_lock = threading.Lock()
+        self.thread = threading.Thread(target=self._run, name="mqtt-publisher", daemon=True)
+        self.thread.start()
 
     def connect(self):
         raw = socket.create_connection((self.cfg["host"], int(self.cfg.get("port", 1883))), 5)
-        if self.cfg.get("tls"):
-            ctx = ssl.create_default_context(cafile=self.cfg.get("ca_file") or None); raw = ctx.wrap_socket(raw, server_hostname=self.cfg["host"])
-        client = self.cfg.get("client_id") or f"fall-rknn-{os.getpid()}"
-        flags = 2; payload = _mqtt_string(client)
-        if self.cfg.get("username"):
-            flags |= 0x80; payload += _mqtt_string(self.cfg["username"])
-        if self.cfg.get("password"):
-            flags |= 0x40; payload += _mqtt_string(self.cfg["password"])
-        variable = _mqtt_string("MQTT") + bytes((4, flags)) + struct.pack("!H", int(self.cfg.get("keepalive_sec", 30)))
-        packet = variable + payload; raw.sendall(b"\x10" + _remaining(len(packet)) + packet)
-        if raw.recv(4)[-1:] != b"\x00": raise ConnectionError("MQTT CONNACK rejected")
-        self.sock = raw
+        try:
+            # Each QoS0 publish is a small packet. Nagle plus delayed ACK can
+            # cap a single connection well below the multi-stream frame rate.
+            raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            if self.cfg.get("tls"):
+                ctx = ssl.create_default_context(cafile=self.cfg.get("ca_file") or None); raw = ctx.wrap_socket(raw, server_hostname=self.cfg["host"])
+            client = self.cfg.get("client_id") or f"fall-rknn-{os.getpid()}"
+            flags = 2; payload = _mqtt_string(client)
+            if self.cfg.get("username"):
+                flags |= 0x80; payload += _mqtt_string(self.cfg["username"])
+            if self.cfg.get("password"):
+                flags |= 0x40; payload += _mqtt_string(self.cfg["password"])
+            variable = _mqtt_string("MQTT") + bytes((4, flags)) + struct.pack("!H", int(self.cfg.get("keepalive_sec", 30)))
+            packet = variable + payload; raw.sendall(b"\x10" + _remaining(len(packet)) + packet)
+            if raw.recv(4)[-1:] != b"\x00": raise ConnectionError("MQTT CONNACK rejected")
+            with self.state_lock:
+                if self.stop_event.is_set():
+                    raise RuntimeError("MQTT publisher closed during connect")
+                self.sock = raw
+        except BaseException:
+            try: raw.close()
+            except OSError: pass
+            raise
 
     def publish(self, topic: str, payload: dict):
+        with self.state_lock:
+            if self.exception is not None:
+                raise RuntimeError("MQTT publisher failed") from self.exception
+            if self.stop_event.is_set():
+                raise RuntimeError("MQTT publisher is closed")
+            try:
+                self.outbox.put_nowait((topic, payload))
+            except queue.Full as exc:
+                raise RuntimeError("MQTT publisher queue is full") from exc
+
+    def _send(self, topic: str, payload: dict):
         data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
         body = _mqtt_string(topic) + data; packet = b"\x30" + _remaining(len(body)) + body
-        with self.lock:
-            for attempt in range(2):
+        for attempt in range(2):
+            try:
+                if self.sock is None: self.connect()
+                self.sock.sendall(packet); return
+            except OSError:
+                if self.sock:
+                    try: self.sock.close()
+                    except OSError: pass
+                self.sock = None
+                if attempt: raise
+
+    def _run(self):
+        try:
+            while not self.stop_event.is_set() or not self.outbox.empty():
+                try: item = self.outbox.get(timeout=.1)
+                except queue.Empty: continue
                 try:
-                    if self.sock is None: self.connect()
-                    self.sock.sendall(packet); return
-                except OSError:
-                    if self.sock:
-                        try: self.sock.close()
-                        except OSError: pass
-                    self.sock = None
-                    if attempt: raise
+                    self._send(*item)
+                except BaseException as exc:
+                    with self.state_lock:
+                        self.exception = exc
+                        self.stop_event.set()
+                    print(f"[mqtt] publisher: {exc}", flush=True)
+                    while True:
+                        try: self.outbox.get_nowait(); self.outbox.task_done()
+                        except queue.Empty: break
+                    return
+                finally:
+                    self.outbox.task_done()
+        finally:
+            self._close_socket()
+
+    def _close_socket(self):
+        with self.state_lock:
+            sock, self.sock = self.sock, None
+        if sock:
+            try: sock.close()
+            except OSError: pass
+
+    def close(self, timeout=12.0):
+        with self.state_lock:
+            self.stop_event.set()
+        self.thread.join(timeout)
+        self._close_socket()
+        if self.thread.is_alive():
+            self.thread.join(1.0)
+            if self.thread.is_alive():
+                raise TimeoutError("MQTT publisher did not stop")
+        if self.exception is not None:
+            raise RuntimeError("MQTT publisher failed") from self.exception
+
+
+def make_stream_publishers(cfg, streams):
+    """Create one MQTT connection per stream to avoid a shared send bottleneck."""
+    publishers = {}
+    try:
+        for stream in streams:
+            stream_id = stream["id"]
+            stream_cfg = dict(cfg)
+            base_id = stream_cfg.get("client_id") or f"fall-rknn-{os.getpid()}"
+            stream_cfg["client_id"] = f"{base_id}-{stream_id}"
+            publishers[stream_id] = MqttPublisher(stream_cfg)
+        return publishers
+    except BaseException:
+        for publisher in publishers.values():
+            try: publisher.close()
+            except BaseException: pass
+        raise
+
+
+def close_publishers(publishers):
+    error = None
+    for publisher in publishers.values():
+        try: publisher.close()
+        except BaseException as exc:
+            if error is None: error = exc
+    if error is not None: raise error
 
 
 def build_payload(stream_id, frame_id, now, inference_ms, pipeline_ms, read_ms,
@@ -332,15 +437,27 @@ class StreamWorker(threading.Thread):
         self.tracker = IoUTracker(float(cfg.get("tracker", {}).get("iou_threshold", .2)),
                                   float(cfg.get("tracker", {}).get("max_lost_sec", .75)))
         self.detectors = {}; self.temporal = {}; self.frame_id = 0; self.global_event_id = 0
-        self.exception = None
+        self.exception = None; self.source = None; self.source_lock = threading.Lock()
+
+    def stop(self):
+        with self.source_lock:
+            source = self.source
+        if source is not None:
+            try: source.close()
+            except BaseException as exc:
+                if self.exception is None: self.exception = exc
 
     def process_frame(self, model, frame, now, read_ms, decoder=None, source_backend=None):
         """Run one captured frame, retaining all state on this stream."""
         decoder = decoder or PoseDecoder(self.cfg.get("postprocess", {}))
         start = time.perf_counter()
-        outputs, inference_ms = model.infer(frame)
+        try:
+            outputs, inference_ms = model.infer(frame)
+        finally:
+            _close_frame(frame)
+        canvas_w, canvas_h = frame_canvas(frame)
         raw = decoder.decode(outputs, float(self.cfg.get("score_threshold", .35)),
-                             float(self.cfg.get("nms_threshold", .45)), frame.shape[0])
+                             float(self.cfg.get("nms_threshold", .45)), canvas_h)
         detections = [Detection(x["box"], x["score"], x["keypoints"]) for x in raw]
         tracker = self.tracker
         tracks = tracker.update(detections, now)
@@ -350,23 +467,23 @@ class StreamWorker(threading.Thread):
         for tr in tracks:
             if tr.track_id not in self.detectors:
                 self.detectors[tr.track_id] = FallDetector(FallConfig(**self.cfg.get("fall", {})))
-            obs = make_observation(tr.detection, now, frame.shape[1], frame.shape[0],
+            obs = make_observation(tr.detection, now, canvas_w, canvas_h,
                                    float(self.cfg.get("keypoint_threshold", .25)))
             if self.cfg.get("temporal_model"):
                 if tr.track_id not in self.temporal:
                     self.temporal[tr.track_id] = TemporalMLP(self.cfg["temporal_model"])
-                pose_frame = self.temporal[tr.track_id].pose_frame(tr.detection, obs, frame.shape[1], frame.shape[0])
+                pose_frame = self.temporal[tr.track_id].pose_frame(tr.detection, obs, canvas_w, canvas_h)
                 positive, probability = self.temporal[tr.track_id].update(pose_frame, now)
                 obs.temporal_available = True; obs.temporal_positive = positive; obs.temporal_probability = probability
             result = self.detectors[tr.track_id].update(obs)
             visible = tr.detection is not None; x1,y1,x2,y2 = tr.box
-            pose17 = [[round(p[0]/frame.shape[1],4),round(p[1]/frame.shape[0],4),round(p[2],4)]
+            pose17 = [[round(p[0]/canvas_w,4),round(p[1]/canvas_h,4),round(p[2],4)]
                       for p in tr.detection.keypoints] if visible else []
             item = {"track_id": tr.track_id, "person_detected": visible,
                     "person_score": round(tr.detection.score,4) if visible else 0.0,
                     "tracking": visible, "missed_frames": tr.missed,
-                    "bbox": [round((x1+x2)/2/frame.shape[1],4),round((y1+y2)/2/frame.shape[0],4),
-                             round((x2-x1)/frame.shape[1],4),round((y2-y1)/frame.shape[0],4)],
+                    "bbox": [round((x1+x2)/2/canvas_w,4),round((y1+y2)/2/canvas_h,4),
+                             round((x2-x1)/canvas_w,4),round((y2-y1)/canvas_h,4)],
                     "pose17": pose17, "keypoints": [], **result}
             people.append(item)
             if result["fall_event"]:
@@ -379,18 +496,19 @@ class StreamWorker(threading.Thread):
                                 (time.perf_counter()-start)*1000, read_ms, people, events,
                                 self.global_event_id, source_backend, decoder.active_backend)
         topic = self.cfg["mqtt"]["topic"].replace("{stream_id}", self.stream["id"])
-        try: self.publisher.publish(topic, payload)
-        except OSError as exc: print(f"[{self.stream['id']}] MQTT: {exc}", flush=True)
+        self.publisher.publish(topic, payload)
 
     def run(self):
         global RUNNING
         model = source = None
         try:
             model = RKNNPose(self.cfg["model_path"], resolve_legacy_core_mask(
-                self.cfg, self.stream, legacy_single_stream=self.stream_count == 1))
+                self.cfg, self.stream, legacy_single_stream=self.stream_count == 1),
+                self.cfg.get("rknn", {}))
             self.tracker = IoUTracker(float(self.cfg["tracker"].get("iou_threshold", .2)),
                                  float(self.cfg["tracker"].get("max_lost_sec", .75)))
             source = create_video_source(self.stream, self.cfg, int(self.cfg.get("input_size", 640)))
+            with self.source_lock: self.source = source
             decoder = PoseDecoder(self.cfg.get("postprocess", {}))
             print(f"[{self.stream['id']}] video={source.active_backend} postprocess={decoder.active_backend}", flush=True)
             while RUNNING:
@@ -410,6 +528,7 @@ class StreamWorker(threading.Thread):
                 try: resource.close()
                 except BaseException as exc:
                     if self.exception is None: self.exception = exc
+            with self.source_lock: self.source = None
             if self.exception is not None: RUNNING = False
 
 
@@ -469,22 +588,29 @@ def main():
     def stop(*_):
         global RUNNING; RUNNING = False
     signal.signal(signal.SIGINT, stop); signal.signal(signal.SIGTERM, stop)
-    publisher = MqttPublisher(cfg["mqtt"])
+    publishers = make_stream_publishers(cfg["mqtt"], enabled)
     # Auto keeps the historical one-stream execution path byte-for-byte in
     # scheduling terms, and only enables the pool when multiple streams exist.
     use_pool = mode == "context_pool" or (mode == "auto" and
                                             ((len(enabled) > 1 and not stream_masks) or
                                              "context_core_masks" in cfg))
     if not use_pool:
-        workers = [StreamWorker(cfg, x, publisher, len(enabled)) for x in enabled]
-        for worker in workers: worker.start()
-        while RUNNING and any(x.is_alive() for x in workers): time.sleep(.5)
-        for worker in workers: worker.join(timeout=5)
-        errors = [worker.exception for worker in workers if worker.exception is not None]
-        if errors: raise errors[0]
+        workers = [StreamWorker(cfg, x, publishers[x["id"]], len(enabled)) for x in enabled]
+        try:
+            for worker in workers: worker.start()
+            while RUNNING and any(x.is_alive() for x in workers): time.sleep(.5)
+            for worker in workers: worker.stop()
+            for worker in workers: worker.join(timeout=5)
+            alive = [worker.name for worker in workers if worker.is_alive()]
+            if alive: raise TimeoutError(f"stream workers did not stop: {alive}")
+            errors = [worker.exception for worker in workers if worker.exception is not None]
+            if errors: raise errors[0]
+        finally:
+            if not any(worker.is_alive() for worker in workers):
+                close_publishers(publishers)
         return
 
-    workers = {x["id"]: StreamWorker(cfg, x, publisher, len(enabled)) for x in enabled}
+    workers = {x["id"]: StreamWorker(cfg, x, publishers[x["id"]], len(enabled)) for x in enabled}
     decoders = {x["id"]: PoseDecoder(cfg.get("postprocess", {})) for x in enabled}
     def source_factory(stream):
         source = create_video_source(stream, cfg, int(cfg.get("input_size", 640)))
@@ -497,7 +623,7 @@ def main():
         paths = {str(x.get("model_path", cfg["model_path"])) for x in enabled}
         if len(paths) != 1:
             raise ValueError("context_pool requires one model_path for all streams")
-        return RKNNPose(next(iter(paths)), context_masks[_index])
+        return RKNNPose(next(iter(paths)), context_masks[_index], cfg.get("rknn", {}))
     def frame_handler(stream, model, item):
         worker = workers[stream["id"]]
         worker.process_frame(model, item.frame, item.timestamp, item.read_ms,
@@ -505,12 +631,13 @@ def main():
     context_masks = resolve_context_core_masks(cfg, context_count)
     pool = ContextPoolRuntime(enabled, context_count,
                               source_factory, model_factory, frame_handler)
-    pool.start()
     try:
+        pool.start()
         while RUNNING and not pool._stop.is_set() and any(t.is_alive() for t in pool._threads):
             time.sleep(.5)
     finally:
         pool.stop()
+        close_publishers(publishers)
     if pool.exception is not None:
         raise pool.exception
 

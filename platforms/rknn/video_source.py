@@ -5,11 +5,63 @@ import os
 import threading
 import time
 
-import cv2
+try:
+    import cv2
+except ImportError:  # The strict DMA-BUF backend never maps through OpenCV.
+    cv2 = None
 import numpy as np
 
 
 _GST_MAP_LOCK = threading.Lock()
+
+
+class NativeFrame:
+    """A borrowed GStreamer DMABUF sample plus immutable capture metadata.
+
+    The sample is deliberately retained until ``close``: the fd belongs to
+    the GstBuffer allocator and may be recycled as soon as the sample dies.
+    ``close``/``release`` are idempotent so queue drop and error paths can both
+    release ownership safely.
+    """
+    model_width = 640
+    model_height = 640
+
+    def __init__(self, sample, *, visible_width, visible_height, visible_rect,
+                 pts=None, dts=None, duration=None, colorimetry=None, range=None,
+                 planes=(), canvas_width=640, canvas_height=640):
+        self.sample = sample
+        self.canvas_width = int(canvas_width); self.canvas_height = int(canvas_height)
+        self.visible_width = int(visible_width); self.visible_height = int(visible_height)
+        self.visible_rect = tuple(int(x) for x in visible_rect)
+        self.pts, self.dts, self.duration = pts, dts, duration
+        self.colorimetry, self.range = colorimetry, range
+        self.planes = tuple(dict(p) for p in planes)
+        self._closed = False
+        self._lock = threading.Lock()
+
+    @property
+    def closed(self):
+        with self._lock: return self._closed
+
+    def close(self):
+        with self._lock:
+            if self._closed: return
+            self._closed = True
+            sample, self.sample = self.sample, None
+        # Dropping the final reference outside the lock avoids allocator
+        # callbacks re-entering user code while the state mutex is held.
+        del sample
+
+    release = close
+
+
+def frame_canvas(frame):
+    """Return model canvas (W,H) for either NativeFrame or ndarray."""
+    if isinstance(frame, NativeFrame):
+        return frame.canvas_width, frame.canvas_height
+    shape = getattr(frame, "shape", ())
+    if len(shape) < 2: raise ValueError("frame has no HxW shape")
+    return int(shape[1]), int(shape[0])
 
 
 def aspect_fit_geometry(source_w: int, source_h: int, size: int = 640):
@@ -82,6 +134,8 @@ class FFmpegRTSP:
         self.capture = None
 
     def start(self):
+        if cv2 is None:
+            raise RuntimeError("OpenCV/FFmpeg backend is unavailable")
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", f"rtsp_transport;{self.transport}")
         self.capture = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
         if not self.capture.isOpened():
@@ -125,12 +179,14 @@ class GStreamerMPP:
         self.timeout_ns = int(appsink_timeout_ms) * 1_000_000
         self.appsink_queue = max(1, int(appsink_queue))
         self.output_format = str(mpp_output_format).lower()
-        if self.output_format not in ("rgb", "nv12_cpu"):
-            raise ValueError("mpp_output_format must be rgb or nv12_cpu")
+        if self.output_format not in ("rgb", "nv12_cpu", "dma_nv12"):
+            raise ValueError("mpp_output_format must be rgb, nv12_cpu, or dma_nv12")
         self.pipeline = self.sink = self.bus = None
         self.Gst = None
         self.GstVideo = None
         self._scaled_size = None
+        self._state_lock = threading.RLock()
+        self._closed = False
 
     def _make(self, factory, name):
         element = self.Gst.ElementFactory.make(factory, name)
@@ -165,16 +221,24 @@ class GStreamerMPP:
         source.set_property("protocols", GstRtsp.RTSPLowerTrans.TCP if self.transport == "tcp"
                             else GstRtsp.RTSPLowerTrans.UDP)
         decoder.set_property("fast-mode", True)
+        if self.output_format == "dma_nv12":
+            # Rockchip plugin versions expose this as a boolean property;
+            # failure is intentional because CPU-backed NV12 violates the
+            # native contract.
+            try:
+                decoder.set_property("dma-feature", True)
+            except Exception as exc:
+                raise RuntimeError("mppvideodec lacks dma-feature") from exc
         # The parser's first CAPS event supplies coded source dimensions.  Its
         # probe below sets an aspect-fitted MPP/RGA output size before decoder
         # negotiation.  Leaving zero here preserves the source if CAPS lacks
         # dimensions, which is safe and handled by the read-side fallback.
         decoder.set_property("width", 0)
         decoder.set_property("height", 0)
-        decoder.set_property("format", 23 if self.output_format == "nv12_cpu" else 15)
+        decoder.set_property("format", 23 if self.output_format in ("nv12_cpu", "dma_nv12") else 15)
         capsfilter.set_property("caps", Gst.Caps.from_string(
-            "video/x-raw,format=NV12" if self.output_format == "nv12_cpu"
-            else "video/x-raw,format=RGB"))
+            "video/x-raw(memory:DMABuf),format=NV12" if self.output_format == "dma_nv12"
+            else ("video/x-raw,format=NV12" if self.output_format == "nv12_cpu" else "video/x-raw,format=RGB")))
         sink.set_property("sync", False)
         # Depth 1 means read() can only ever hand back the frame that arrives
         # next: finish early and it waits, finish late and that frame was
@@ -223,7 +287,11 @@ class GStreamerMPP:
         if result == Gst.StateChangeReturn.FAILURE:
             pipeline.set_state(Gst.State.NULL)
             raise RuntimeError("GStreamer MPP pipeline refused PLAYING state")
-        self.pipeline, self.sink, self.bus = pipeline, sink, pipeline.get_bus()
+        with self._state_lock:
+            if self._closed:
+                pipeline.set_state(Gst.State.NULL)
+                return
+            self.pipeline, self.sink, self.bus = pipeline, sink, pipeline.get_bus()
 
     def _bus_error(self):
         if self.bus is None:
@@ -237,13 +305,16 @@ class GStreamerMPP:
         return RuntimeError("GStreamer MPP stream reached EOS")
 
     def read(self):
-        if self.pipeline is None:
-            self.start()
+        with self._state_lock:
+            if self._closed: return None
+            if self.pipeline is None: self.start()
+            sink = self.sink; timeout_ns = self.timeout_ns
+        if sink is None: return None
         error = self._bus_error()
         if error:
             self.close()
             raise error
-        sample = self.sink.emit("try-pull-sample", self.timeout_ns)
+        sample = sink.emit("try-pull-sample", timeout_ns)
         if sample is None:
             error = self._bus_error()
             if error:
@@ -259,6 +330,8 @@ class GStreamerMPP:
         caps = sample_caps.get_structure(0)
         width, height = int(caps.get_value("width")), int(caps.get_value("height"))
         buffer = sample.get_buffer()
+        if self.output_format == "dma_nv12":
+            return self._native_frame(sample, sample_caps, caps, buffer, width, height)
         # PyGObject's MapInfo property access is not reliable when several
         # appsinks map concurrently. Keep the borrowed-memory window short and
         # process-local; the returned frame always owns its storage.
@@ -288,6 +361,8 @@ class GStreamerMPP:
                         frame = copy_strided_rgb_to_letterbox(
                             mapped_data, width, height, stride, self.size)
                     else:
+                        if cv2 is None:
+                            raise RuntimeError("OpenCV resize fallback is unavailable")
                         scaled_w, scaled_h, _, _ = aspect_fit_geometry(
                             width, height, self.size)
                         scaled = cv2.resize(mapped_rgb, (scaled_w, scaled_h),
@@ -297,11 +372,53 @@ class GStreamerMPP:
                 buffer.unmap(mapped)
         return frame
 
+    def _native_frame(self, sample, sample_caps, caps, buffer, width, height):
+        """Validate and retain a single DMABUF NV12 sample without mapping it."""
+        features = sample_caps.get_features(0)
+        if features is None or not features.contains("memory:DMABuf"):
+            sample_ref = None; del sample_ref
+            raise RuntimeError("dma_nv12 negotiated without memory:DMABuf")
+        if str(caps.get_value("format")) != "NV12" or width <= 0 or height <= 0 or width % 2 or height % 2:
+            raise RuntimeError("dma_nv12 requires even NV12 dimensions")
+        if buffer.n_memory() != 1:
+            raise RuntimeError("dma_nv12 supports exactly one GstMemory")
+        info = self.GstVideo.VideoInfo.new_from_caps(sample_caps)
+        if info is None or int(info.finfo.n_planes) != 2:
+            raise RuntimeError("invalid NV12 VideoInfo")
+        planes = []
+        try:
+            import gi
+            gi.require_version("GstAllocators", "1.0")
+            from gi.repository import GstAllocators
+            memory = buffer.peek_memory(0)
+            if not GstAllocators.is_dmabuf_memory(memory):
+                raise RuntimeError("GstMemory is not DMA-BUF")
+            fd = int(GstAllocators.dmabuf_memory_get_fd(memory))
+        except Exception as exc:
+            raise RuntimeError("GstAllocators DMABUF fd extraction unavailable") from exc
+        for index in (0, 1):
+            offset = int(info.offset[index]); stride = int(info.stride[index])
+            plane_h = height if index == 0 else height // 2
+            if offset < 0 or stride < width or offset + stride * plane_h <= offset:
+                raise RuntimeError("invalid NV12 plane offset/stride")
+            planes.append({"fd": fd, "offset": offset, "stride": stride,
+                           "width": width, "height": plane_h})
+        colorimetry = caps.get_string("colorimetry") if caps.has_field("colorimetry") else None
+        rng = caps.get_string("range") if caps.has_field("range") else None
+        return NativeFrame(sample, visible_width=width, visible_height=height,
+                           visible_rect=(0, 0, width, height), pts=buffer.pts,
+                           dts=buffer.dts, duration=buffer.duration,
+                           colorimetry=colorimetry, range=rng, planes=planes,
+                           canvas_width=self.size, canvas_height=self.size)
+
     def close(self):
-        if self.pipeline is not None:
-            self.pipeline.set_state(self.Gst.State.NULL)
-        self.pipeline = self.sink = self.bus = None
-        self._scaled_size = None
+        with self._state_lock:
+            self._closed = True
+            pipeline, gst = self.pipeline, self.Gst
+            self.pipeline = self.sink = self.bus = None
+            self._scaled_size = None
+        if pipeline is not None and gst is not None:
+            pipeline.set_state(gst.State.NULL)
 
 
 class FallbackVideoSource:
@@ -379,3 +496,18 @@ def validate_backend_config(config):
         raise ValueError(f"unsupported postprocess backend: {post.get('backend')}")
     if str(post.get("fallback", "numpy")) not in ("none", "numpy"):
         raise ValueError(f"unsupported postprocess fallback: {post.get('fallback')}")
+    rknn = config.get("rknn", {})
+    rknn_backend = str(rknn.get("backend", "legacy"))
+    if rknn_backend not in ("legacy", "auto", "native"):
+        raise ValueError(f"unsupported rknn backend: {rknn_backend}")
+    base_video = dict(config.get("video", {}))
+    video_configs = [base_video]
+    for stream in config.get("streams", []):
+        merged = dict(base_video); merged.update(stream.get("video", {}))
+        video_configs.append(merged)
+    for video in video_configs:
+        if str(video.get("mpp_output_format", "rgb")).lower() == "dma_nv12":
+            if (rknn_backend != "native" or not bool(rknn.get("strict", False)) or
+                    not bool(video.get("strict", False)) or
+                    str(video.get("fallback", "opencv_ffmpeg")) != "none"):
+                raise ValueError("dma_nv12 requires strict native RKNN and no video fallback")

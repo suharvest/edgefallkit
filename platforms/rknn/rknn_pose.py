@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import time
+import hashlib
+from pathlib import Path
 import numpy as np
 
 
@@ -124,16 +126,79 @@ def decode_pose(outputs, confidence=0.35, nms_threshold=0.45, size=640,
     return _DEFAULT_DECODER.decode(outputs, confidence, nms_threshold, size)
 
 
+class NativeRKNNPose:
+    """Narrow DMABUF backend facade.
+
+    The optional ``native_rknn.NativeRuntime`` ctypes bridge owns RGA/RKNN
+    handles. Keeping loading here makes the Python contract testable on x86
+    while refusing to silently copy a NativeFrame through the legacy path.
+    """
+    def __init__(self, model: str, core_mask: int | None = None, model_sha256=None, model_size=None):
+        path = Path(model)
+        if model_size is not None and path.stat().st_size != int(model_size):
+            raise RuntimeError("model size identity mismatch before native init")
+        if model_sha256:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest.lower() != str(model_sha256).lower():
+                raise RuntimeError("model SHA256 identity mismatch before native init")
+        try:
+            from native_rknn import NativeRuntime
+        except Exception as exc:
+            raise RuntimeError("native RKNN extension is unavailable") from exc
+        self._native = NativeRuntime(str(path), core_mask)
+        self.active_backend = "native"
+
+    def infer(self, frame):
+        from video_source import NativeFrame
+        if not isinstance(frame, NativeFrame):
+            raise TypeError("native backend requires NativeFrame")
+        result = self._native.infer(frame)
+        return result if isinstance(result, tuple) and len(result) == 2 else (result, 0.0)
+
+    def close(self):
+        close = getattr(self._native, "close", None)
+        if close: close()
+
+
 class RKNNPose:
-    def __init__(self, model: str, core_mask: int | None = None):
+    def __init__(self, model: str, core_mask: int | None = None, config=None):
+        config = config or {}
+        backend = str(config.get("backend", "legacy"))
+        if backend not in ("legacy", "auto", "native"):
+            raise ValueError("rknn.backend must be legacy, auto, or native")
+        self._native = None
+        self.rknn = None
+        self._model = model; self._core_mask = core_mask
+        if backend in ("native", "auto"):
+            try:
+                self._native = NativeRKNNPose(model, core_mask, config.get("model_sha256"), config.get("model_size"))
+            except Exception:
+                if backend == "native" or bool(config.get("strict", False)):
+                    raise
+        if self._native is not None:
+            self.active_backend = "native"
+            return
+        if self._native is None:
+            self._init_legacy()
+
+    def _init_legacy(self):
+        if self.rknn is not None: return
         from rknnlite.api import RKNNLite
         self.rknn = RKNNLite(verbose=False)
-        ret = self.rknn.load_rknn(model)
-        if ret: raise RuntimeError(f"load_rknn({model})={ret}")
-        ret = self.rknn.init_runtime(**({"core_mask": core_mask} if core_mask is not None else {}))
-        if ret: raise RuntimeError(f"init_runtime({model})={ret}")
+        ret = self.rknn.load_rknn(self._model)
+        if ret: raise RuntimeError(f"load_rknn({self._model})={ret}")
+        ret = self.rknn.init_runtime(**({"core_mask": self._core_mask} if self._core_mask is not None else {}))
+        if ret: raise RuntimeError(f"init_runtime({self._model})={ret}")
+        self.active_backend = "legacy"
 
     def infer(self, rgb_640: np.ndarray):
+        if self._native is not None:
+            from video_source import NativeFrame
+            if isinstance(rgb_640, NativeFrame):
+                return self._native.infer(rgb_640)
+            # Non-strict source fallback: initialize the legacy runtime only
+            # when a CPU ndarray actually arrives.
+            self._init_legacy()
         x = np.ascontiguousarray(rgb_640[None], dtype=np.uint8)
         start = time.perf_counter()
         outputs = self.rknn.inference(inputs=[x])
@@ -142,4 +207,7 @@ class RKNNPose:
         return outputs, elapsed
 
     def close(self):
-        self.rknn.release()
+        if self._native is not None:
+            self._native.close(); self._native = None
+        if self.rknn is not None:
+            self.rknn.release(); self.rknn = None

@@ -15,7 +15,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fall_core import Detection, IoUTracker, make_observation  # noqa: E402
-from rknn_pose import RKNNPose, decode_pose  # noqa: E402
+from rknn_pose import PoseDecoder, RKNNPose  # noqa: E402
 
 TARGET_FPS = 15.0
 EXPECTED = {1: 32, 2: 48, 3: 43, 4: 37}
@@ -64,7 +64,7 @@ def row_for_tracks(tracks, timestamp: float, width: int, height: int,
     }
 
 
-def extract_clip(model: RKNNPose, source: Path, destination: Path, args) -> dict:
+def extract_clip(model: RKNNPose, decoder: PoseDecoder, source: Path, destination: Path, args) -> dict:
     capture = cv2.VideoCapture(str(source), cv2.CAP_FFMPEG)
     if not capture.isOpened():
         raise RuntimeError(f"cannot decode {source}")
@@ -85,7 +85,7 @@ def extract_clip(model: RKNNPose, source: Path, destination: Path, args) -> dict
                 continue
             rgb = letterbox(bgr, args.input_size)
             outputs, inference_ms = model.infer(rgb)
-            raw = decode_pose(outputs, args.score_threshold, args.nms_threshold, args.input_size)
+            raw = decoder.decode(outputs, args.score_threshold, args.nms_threshold, args.input_size)
             detections = [Detection(item["box"], item["score"], item["keypoints"]) for item in raw]
             tracks = tracker.update(detections, next_sample)
             rows.append(row_for_tracks(tracks, next_sample, args.input_size, args.input_size,
@@ -119,9 +119,42 @@ def save_manifest(path: Path, manifest: dict) -> None:
     part.replace(path)
 
 
+def source_inventory(sources, dataset: Path) -> dict[str, str]:
+    return {
+        source.relative_to(dataset).as_posix(): sha256(source)
+        for _, _, source, _ in sources
+    }
+
+
+def extraction_identity(args, inventory: dict[str, str] | None = None) -> dict:
+    config_sha = sha256(args.config) if args.config else None
+    root = Path(__file__).resolve().parents[3]
+    runtime_paths = {
+        "app": root / "platforms/rknn/app.py",
+        "fall_core": root / "platforms/rknn/fall_core.py",
+        "rknn_pose": root / "platforms/rknn/rknn_pose.py",
+        "video_source": root / "platforms/rknn/video_source.py",
+        "decoder_cpp": root / "platforms/rknn/cpp/rknn_postprocess.cpp",
+    }
+    return {
+        "input_size": args.input_size, "target_fps": TARGET_FPS,
+        "score_threshold": args.score_threshold,
+        "keypoint_threshold": args.keypoint_threshold,
+        "nms_threshold": args.nms_threshold,
+        "iou_threshold": args.iou_threshold, "max_lost_sec": args.max_lost_sec,
+        "config_sha256": config_sha,
+        "postprocess": {"backend": "cpp", "strict": True, "fallback": "none"},
+        "runtime_source_hashes": {key: sha256(path) for key, path in runtime_paths.items()},
+        "subjects": sorted({int(value) for value in args.subjects.split(",") if value.strip()}),
+        "source_inventory": inventory or {},
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", type=Path, required=True)
+    ap.add_argument("--config", type=Path,
+                    help="optional production config; its hash is part of resume identity")
     ap.add_argument("--platform", choices=("rk3576", "rk3588"), required=True)
     ap.add_argument("--dataset", type=Path, required=True)
     ap.add_argument("--output", type=Path, required=True)
@@ -156,33 +189,46 @@ def main() -> int:
         sources = sources[:args.limit]
 
     manifest_path = args.output / "extraction-manifest.json"
+    inventory = source_inventory(sources, args.dataset)
+    identity = extraction_identity(args, inventory)
     manifest = {
         "schema_version": 1, "platform": args.platform,
         "model": str(args.model), "model_sha256": sha256(args.model),
         "dataset": str(args.dataset), "subjects": subjects,
         "holdout_authorized": bool(args.allow_holdout), "target_fps": TARGET_FPS,
         "input_size": args.input_size, "expected_clips": expected,
+        "extraction_identity": identity,
         "completed": {}, "failed": {}, "started_unix_ms": int(time.time() * 1000),
     }
     if args.resume and manifest_path.exists():
         old = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if old.get("platform") != args.platform or old.get("model_sha256") != manifest["model_sha256"]:
-            raise SystemExit("resume manifest platform/model mismatch")
+        if (old.get("platform") != args.platform or
+                old.get("model_sha256") != manifest["model_sha256"] or
+                old.get("extraction_identity") != identity):
+            raise SystemExit("resume manifest platform/model/config/threshold/source identity mismatch")
         manifest["completed"] = old.get("completed", {})
         manifest["failed"] = old.get("failed", {})
         manifest["started_unix_ms"] = old.get("started_unix_ms", manifest["started_unix_ms"])
 
+    decoder = PoseDecoder({"backend": "cpp", "strict": True, "fallback": "none"})
+    if decoder.active_backend != "cpp":
+        raise SystemExit(f"C++ postprocess is required, got {decoder.active_backend}")
     model = RKNNPose(str(args.model))
     try:
         for index, (subject, kind, source, destination) in enumerate(sources, 1):
             key = f"subject-{subject}/{kind}/{source.name}"
+            source_sha = inventory[source.relative_to(args.dataset).as_posix()]
             completed = manifest["completed"].get(key)
-            if args.resume and completed and destination.exists() and sha256(destination) == completed.get("trace_sha256"):
+            if (args.resume and completed and destination.exists() and
+                    completed.get("source_sha256") == source_sha and
+                    sha256(destination) == completed.get("trace_sha256")):
                 print(f"[{index}/{len(sources)}] resume {key}", flush=True)
                 continue
             try:
-                result = extract_clip(model, source, destination, args)
-                manifest["completed"][key] = {"source": str(source), "trace": str(destination), **result}
+                result = extract_clip(model, decoder, source, destination, args)
+                manifest["completed"][key] = {"source": str(source),
+                                                "source_sha256": source_sha,
+                                                "trace": str(destination), **result}
                 manifest["failed"].pop(key, None)
                 print(f"[{index}/{len(sources)}] {key} frames={result['frames']} coverage={result['coverage']:.3f}", flush=True)
             except Exception as exc:

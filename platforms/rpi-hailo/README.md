@@ -270,6 +270,33 @@ contract 证据。
 CTest。未显式设置 queue/drop 的默认配置复验 16 路为 14.5828–14.6328 FPS/路，
 CPU 239%、RSS 1,258,256 KiB、70.8°C。
 
+## 2026-09-22 1080p 多路路数边界
+
+同一台 `harvest-pi`、同一个 `yolov8s_pose.hef`，源改为 1920x1080@15 FPS：H.264 High
+约 4 Mbps、H.265 Main 约 2.35 Mbps，均 GOP30，warmup 10 秒、测量 60 秒，目标每路至少
+14.5 FPS。
+
+| 输入 | 解码方式 | 只解码 | 完整管线 |
+|---|---|---:|---:|
+| 1080p H.264 | CPU 软解 `avdec_h264`（Pi 5 无 H.264 硬解） | 6 路通过，7 路挂 | **5 路**（14.9691–15.0191 FPS） |
+| 1080p H.265 | `v4l2slh265dec` 硬解 + GPU 转换缩放 | 11 路通过，12 路挂 | **9 路**（14.9879–15.0212 FPS） |
+| 640x640 H.264 | CPU 软解 | — | 16 路（见上一节） |
+
+H.264 5 路时 CPU 350%、RSS 470 MB、71.9°C；H.265 9 路时 CPU 208%、RSS 681 MB、69.7°C。
+全程 `get_throttled=0xe0000`，即开机以来发生过限频，测量期间当前状态位未置位。
+
+瓶颈是 **V3D GPU**：H.265 10 路时 render 队列 94% 忙（`/sys/class/drm/card0/device/gpu_stats`
+的 Δruntime/Δtimestamp），同一时刻 CPU 67%；同一个二进制用 10 路 `test://ball`
+合成输入测得每路 30 FPS、合计 300 FPS，是 10 路 1080p 所需 150 FPS 的两倍，故 Hailo
+不是限制。单路每帧 4 个 render job、4.76 ms GPU 时间。
+
+降低 GPU 开销的四种改法均未成立：`glcolorscale`、`glshader` 只接受 RGBA
+`texture-target=2D`，无法替代 `glcolorconvert` 处理解码器的 external-oes 纹理；
+`gldownload` 不输出打包 RGB；`pispconvert`（PiSP 硬件转换，libpisp 1.7.0）协商正常但导入
+缓冲时抛 `Plane 0 buffer is invalid`，在 1080p、720p、1280x704 与三种输出内存类型下均复现。
+完整记录见
+[`../../evaluation/reports/rpi-hailo8-1080p-multistream-20260922.json`](../../evaluation/reports/rpi-hailo8-1080p-multistream-20260922.json)。
+
 ### Official YOLOv8m-Pose benchmark (2026-08-30)
 
 Official Hailo Model Zoo v2.19.0 Hailo-8 `yolov8m_pose.hef` is 31,608,992 bytes,

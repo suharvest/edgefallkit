@@ -104,6 +104,15 @@ latency under load; it does not claim to increase throughput. For RTSP,
 `1`/`0`). Set it to `true` when prioritizing lower latency over retaining every
 frame; frames exceeding the configured source latency can then be discarded.
 
+`RTSP_CODEC` selects the RTSP depayload/decode chain: `h264` (default,
+`avdec_h264` software decode) or `h265` (`v4l2slh265dec`, the Pi 5 HEVC
+hardware decoder on `/dev/video19`). Pi 5 has no H.264 hardware decoder. All
+streams in one process use the same codec. At 1080p the HEVC decoder outputs
+only DMA_DRM (SAND128), so the `h265` chain converts and scales on the GPU
+(`glupload ! glcolorconvert ! glcolorscale ! gldownload`, headless EGL). The
+runtime image does not ship GStreamer GL/Mesa, so `h265` currently needs a
+native build.
+
 Before benchmarking, ensure no other process owns `/dev/hailo0`. HailoRT 4.21
 direct-mode contexts are exclusive. In the authorized 2026-08-13 maintenance
 window, HailoRT measured 393.3 FPS / 6.87 ms HW latency; the application ran

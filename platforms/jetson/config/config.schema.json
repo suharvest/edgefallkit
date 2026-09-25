@@ -56,6 +56,12 @@
         "confirmation_sec": {"type": "number", "minimum": 0},
         "suspected_timeout_sec": {"type": "number", "minimum": 0},
         "occlusion_grace_sec": {"type": "number", "minimum": 0},
+        "late_confirmation_sec": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3.2,
+          "description": "Extra time after suspected_timeout_sec during which a still-lying suspected candidate may be confirmed by a late temporal positive (the 48-frame temporal window at 15 fps)."
+        },
         "recovery_torso_angle_deg": {"type": "number", "minimum": 0, "maximum": 180},
         "recovery_aspect_ratio": {"type": "number", "minimum": 0},
         "recovery_window_sec": {"type": "number", "minimum": 0},

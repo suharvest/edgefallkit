@@ -2,8 +2,13 @@
   "engine_path": "/models/yolo11n-pose.sm87.trt10.3.fp16.engine",
   "trt_library": "/app/libjetson_fall_trt.so",
   "temporal_profile": "auto",
-  "score_threshold_by_profile": {"yolov8m-int8-pose": 0.15},
-  "input": {"width": 640, "height": 640},
+  "score_threshold_by_profile": {
+    "yolov8m-int8-pose": 0.15
+  },
+  "input": {
+    "width": 640,
+    "height": 640
+  },
   "score_threshold": 0.35,
   "keypoint_threshold": 0.25,
   "nms_threshold": 0.45,
@@ -12,7 +17,7 @@
   "rtsp_latency_ms": 100,
   "publish_empty_frames": false,
   "tracker": {
-    "iou_threshold": 0.20,
+    "iou_threshold": 0.2,
     "center_distance_threshold": 0.25,
     "max_missed_frames": 8
   },
@@ -24,13 +29,14 @@
     "torso_angle_threshold_deg": 55.0,
     "bbox_aspect_ratio_threshold": 1.25,
     "min_suspected_features": 2,
-    "confirmation_sec": 0.80,
-    "suspected_timeout_sec": 1.50,
+    "confirmation_sec": 0.8,
+    "suspected_timeout_sec": 1.5,
     "occlusion_grace_sec": 0.75,
+    "late_confirmation_sec": 3.2,
     "recovery_torso_angle_deg": 35.0,
-    "recovery_aspect_ratio": 1.10,
-    "recovery_window_sec": 2.00,
-    "cooldown_sec": 3.00
+    "recovery_aspect_ratio": 1.1,
+    "recovery_window_sec": 2.0,
+    "cooldown_sec": 3.0
   },
   "mqtt": {
     "enabled": true,
@@ -47,7 +53,10 @@
     "cert_file": "",
     "key_file": ""
   },
-  "runtime": {"workers": "auto", "max_streams_per_worker": 7},
+  "runtime": {
+    "workers": "auto",
+    "max_streams_per_worker": 7
+  },
   "streams": [
     {
       "id": "cam-01",

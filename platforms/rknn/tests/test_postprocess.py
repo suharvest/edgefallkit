@@ -25,6 +25,49 @@ def synthetic_outputs(layout="nchw"):
     return outputs
 
 
+def absolute_outputs(layout="nchw", gx=3, gy=5, grid=8, input_size=64):
+    """One detection at cell (gx, gy): DFL distances all equal 2 and every raw
+    keypoint offset 0.25, so the keypoints must land exactly on the box centre
+    ((gx+0.5)*stride, (gy+0.5)*stride)."""
+    box = np.zeros((1, 64, grid, grid), np.float32)
+    box[0, 2::16, gy, gx] = 10.0            # softmax -> bin 2 -> distance 2.0
+    score = np.zeros((1, 1, grid, grid), np.float32)
+    score[0, 0, gy, gx] = 0.91
+    keypoints = np.full((1, 51, grid, grid), 0.25, np.float32)
+    keypoints[0, 2::3] = 0.0
+    keypoints[0, 2::3, gy, gx] = 2.0
+    outputs = (box, score, keypoints)
+    if layout == "nhwc":
+        outputs = tuple(x.transpose(0, 2, 3, 1) for x in outputs)
+    return outputs, (gx + 0.5) * (input_size // grid), (gy + 0.5) * (input_size // grid)
+
+
+class AbsoluteDecodeTest(unittest.TestCase):
+    def assert_absolute(self, detections, cx, cy):
+        self.assertEqual(len(detections), 1)
+        det = detections[0]
+        x1, y1, x2, y2 = det["box"]
+        self.assertAlmostEqual((x1 + x2) / 2, cx, places=4)
+        self.assertAlmostEqual((y1 + y2) / 2, cy, places=4)
+        for kx, ky, kc in det["keypoints"]:
+            self.assertAlmostEqual(kx, cx, places=4)
+            self.assertAlmostEqual(ky, cy, places=4)
+
+    def test_numpy_keypoints_land_on_box_centre(self):
+        for layout in ("nchw", "nhwc"):
+            outputs, cx, cy = absolute_outputs(layout)
+            self.assert_absolute(decode_pose_numpy(outputs, 0.35, 0.45, 64), cx, cy)
+
+    def test_cpp_keypoints_land_on_box_centre(self):
+        try:
+            decoder = PoseDecoder({"backend": "cpp", "strict": True, "fallback": "none"})
+        except RuntimeError as exc:
+            self.skipTest(str(exc))
+        for layout in ("nchw", "nhwc"):
+            outputs, cx, cy = absolute_outputs(layout)
+            self.assert_absolute(decoder.decode(outputs, 0.35, 0.45, 64), cx, cy)
+
+
 class PostprocessTest(unittest.TestCase):
     def assert_detections_close(self, left, right):
         self.assertEqual(len(left), len(right))

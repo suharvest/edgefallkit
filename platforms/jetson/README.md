@@ -511,7 +511,15 @@ The production state machine has one confirmation authority: the learned
 temporal gate. Geometry (hip drop, torso angle and box aspect) can move a track
 from `normal` to `suspected`, keep that suspicion alive, or drive recovery, but
 cannot enter `fallen` when `fall.temporal_confirmation_required` is `true`
-(the default). A first frame that is already lying therefore does not emit an
+(the default). Arming requires a horizontal cue plus either a fast hip drop
+within `motion_window_sec` or, across an occluded gap, a hip displacement of at
+least `hip_drop_distance_threshold` below the last upright baseline; a
+temporal-positive window alone never leaves `normal`. Confirmation also
+requires the current pose to be valid and lying, with the arming drop counting
+as the motion evidence feature. A candidate still lying at
+`suspected_timeout_sec` stays `suspected` for up to `late_confirmation_sec`
+(3.2 s, the 48-frame temporal window at 15 fps) so a late temporal positive can
+confirm it; standing up ends it. A first frame that is already lying therefore does not emit an
 event. The temporal window is still updated during a short detector occlusion,
 but a missed/stale track cannot create a new event; a reacquired visible pose
 can confirm from the retained history. `fall_event` is an edge (one frame at

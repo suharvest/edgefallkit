@@ -52,6 +52,10 @@ struct FallConfig {
     // Pose can disappear immediately after impact near the floor. This grace
     // retains a candidate but never originates an event without a valid pose.
     float occlusion_grace_sec = 0.75f;
+    // Extra time after suspected_timeout_sec during which a still-lying
+    // candidate may be confirmed by a late temporal positive.  3.2 s is the
+    // learned gate's window (48 frames at 15 fps).
+    float late_confirmation_sec = 3.20f;
     float recovery_torso_angle_deg = 35.0f;
     float recovery_aspect_ratio = 1.10f;
     float recovery_window_sec = 2.00f;
@@ -64,6 +68,9 @@ struct FallDiagnostics {
     float torso_angle_deg = 0.0f;
     float bbox_aspect_ratio = 0.0f;
     int evidence_features = 0;
+    // Posture features plus the latched arming-motion feature; used for
+    // confirmation so a victim lying still after impact still qualifies.
+    int confirmation_features = 0;
     float evidence_score = 0.0f;
     bool lying_posture = false;
     bool upright_posture = false;
@@ -102,6 +109,8 @@ private:
     bool isLying(const FallObservation& o) const;
     bool isUpright(const FallObservation& o) const;
     int featureCount(const FallObservation& o, float hip_speed) const;
+    bool inLateLatch(double timestamp_sec) const;
+    void toNormal();
     void updateDiagnostics(const FallObservation& o, float hip_speed);
 
     FallConfig config_;
@@ -114,6 +123,8 @@ private:
     double last_fast_drop_sec_ = -1.0;
     float baseline_hip_y_ = 0.0f;
     bool have_baseline_hip_y_ = false;
+    double baseline_timestamp_sec_ = -1.0;
+    bool gap_since_baseline_ = false;
     float max_drop_distance_ = 0.0f;
     double suspected_since_sec_ = -1.0;
     double last_strong_evidence_sec_ = -1.0;

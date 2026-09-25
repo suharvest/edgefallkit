@@ -298,6 +298,8 @@ class Track:
         self.previous_hip_y: Optional[float] = None
         self.previous_timestamp: Optional[float] = None
         self.baseline_hip_y: Optional[float] = None
+        self.baseline_timestamp = -1.0
+        self.gap_since_baseline = False
         self.last_fast_drop = -1.0
         self.max_drop_distance = 0.0
         self.suspected_since = -1.0
@@ -399,8 +401,12 @@ class Track:
         self.age += 1 if self.age else 1
         self.missed = 0
         current = self._features(detection, timestamp)
-        if self.state == "normal" and not current.lying_posture:
+        horizontal_cue = (current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0) or
+                          current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25))
+        if self.state == "normal" and not horizontal_cue:
             self.baseline_hip_y = current.hip_y
+            self.baseline_timestamp = timestamp
+            self.gap_since_baseline = False
         if self.state == "suspected" and self.baseline_hip_y is not None:
             self.max_drop_distance = max(self.max_drop_distance, current.hip_y - self.baseline_hip_y)
             current.hip_drop_distance = self.max_drop_distance
@@ -430,6 +436,8 @@ class Track:
         current = FallFeatures(valid=False, temporal_probability=float(temporal.probability),
                                temporal_positive=bool(temporal.positive),
                                hip_drop_distance=self.max_drop_distance)
+        if self.baseline_hip_y is not None:
+            self.gap_since_baseline = True
         if self.state == "suspected" and self.suspected_since >= 0.0:
             # Keep the temporal window warm, but do not create an event from a
             # missed/stale track. A reacquired visible pose can confirm using
@@ -441,7 +449,9 @@ class Track:
                 # reaches this branch: geometry may arm suspicion, but cannot
                 # confirm a fall.
                 self._trigger(timestamp)
-            elif age > self._number("suspected_timeout_sec", 1.5):
+            elif age > self._number("suspected_timeout_sec", 1.5) and not (recent and self._in_late_latch(timestamp)):
+                # A late-confirmation candidate survives only a short
+                # occlusion right after a lying frame.
                 self._reset_suspicion()
         current.lying_posture = False
         self.features = current
@@ -454,6 +464,14 @@ class Track:
         self.motion_triggered = False
         self.last_fast_drop = -1.0
         self.max_drop_distance = 0.0
+
+    def _in_late_latch(self, timestamp: float) -> bool:
+        """Bounded window after ``suspected_timeout_sec`` during which a
+        still-lying candidate may be confirmed by a late temporal positive
+        (3.2 s: the 48-frame learned window at 15 fps)."""
+        return bool(self.motion_triggered and self.suspected_since >= 0.0 and
+                    timestamp - self.suspected_since <= self._number("suspected_timeout_sec", 1.5) +
+                    self._number("late_confirmation_sec", 3.2))
 
     def _geometry_confirmation_ready(self, timestamp: float, *, recent: Optional[bool] = None) -> bool:
         """Return the old geometry confirmation predicate.
@@ -485,31 +503,54 @@ class Track:
         self.fall_event = False
         if not self.initialized:
             # A first-frame lying pose is not a fall event.  There is no prior
-            # motion context yet.  Even an optimistic/future temporal bridge
-            # must observe at least one prior frame before it may confirm.
-            if not self.temporal_confirmation_required and self._geometry_confirmation_ready(timestamp):
-                self._trigger(timestamp)
-            elif self._temporal_confirmation_ready(current) and timestamp >= self.cooldown_until:
-                self._trigger(timestamp)
+            # motion context yet, so neither geometry nor an optimistic/future
+            # temporal bridge may originate an event here.
             return
         cooldown = timestamp < self.cooldown_until
+        # Confirmation evidence: current posture features plus the motion
+        # feature, which a motion-armed suspected candidate has latched (a
+        # victim lying still after impact has ~0 current hip speed).
+        motion = (current.hip_drop_speed >= self._number("hip_drop_speed_threshold", 0.25) or
+                  (self.state == "suspected" and self.motion_triggered))
+        confirmation_features = (int(current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0)) +
+                                 int(current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25)) +
+                                 int(motion))
+        enough = confirmation_features >= int(self.fall_cfg.get("min_suspected_features", 2))
         if self.state == "normal":
-            if not cooldown and self._temporal_confirmation_ready(current):
-                self._trigger(timestamp)
-            elif not cooldown and self.last_fast_drop >= 0.0 and timestamp - self.last_fast_drop <= self._number("motion_window_sec", 0.75) and (current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0) or current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25)):
+            # Geometry is the only way out of normal.  A temporal-positive
+            # window on its own (e.g. somebody sitting down quickly) must not
+            # raise an alarm without hip-drop + horizontal arming.
+            fast_drop = (self.last_fast_drop >= 0.0 and
+                         timestamp - self.last_fast_drop <= self._number("motion_window_sec", 0.75))
+            displaced = (self.baseline_hip_y is not None and self.gap_since_baseline and
+                         timestamp - self.baseline_timestamp <= self._number("motion_window_sec", 0.75) +
+                         self._number("occlusion_grace_sec", 0.75) and
+                         current.hip_y - self.baseline_hip_y >= self._number("hip_drop_distance_threshold", 0.02))
+            horizontal_cue = (current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0) or
+                              current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25))
+            if not cooldown and horizontal_cue and (fast_drop or displaced):
                 self.state = "suspected"
-                self.suspected_since = self.last_fast_drop
+                self.suspected_since = self.last_fast_drop if fast_drop else timestamp
                 self.last_strong_evidence = timestamp if current.lying_posture else -1.0
                 self.motion_triggered = True
                 self.max_drop_distance = max(0.0, current.hip_y - (self.baseline_hip_y or current.hip_y))
         elif self.state == "suspected":
-            if not cooldown and self._temporal_confirmation_ready(current):
-                self._trigger(timestamp)
-            elif current.lying_posture and current.evidence_features >= int(self.fall_cfg.get("min_suspected_features", 2)):
+            if current.lying_posture and enough:
                 self.last_strong_evidence = timestamp
-                if self._geometry_confirmation_ready(timestamp):
-                    self._trigger(timestamp)
-            elif current.upright_posture or timestamp - self.suspected_since > self._number("suspected_timeout_sec", 1.5):
+            if (not cooldown and self._temporal_confirmation_ready(current) and
+                    current.lying_posture and enough):
+                # Learned confirmation also needs the current pose lying.
+                self._trigger(timestamp)
+            elif (not self.temporal_confirmation_required and self.motion_triggered and
+                  current.lying_posture and enough and
+                  self.max_drop_distance >= self._number("hip_drop_distance_threshold", 0.02) and
+                  timestamp - self.suspected_since >= self._number("confirmation_sec", 0.80)):
+                self._trigger(timestamp)
+            elif (current.upright_posture or
+                  (timestamp - self.suspected_since > self._number("suspected_timeout_sec", 1.5) and
+                   not (current.lying_posture and self._in_late_latch(timestamp)))):
+                # Past the timeout only a still-lying candidate inside the
+                # bounded late-confirmation latch is kept.
                 self._reset_suspicion()
         elif self.state == "fallen":
             if current.upright_posture:

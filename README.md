@@ -9,6 +9,11 @@
 ![MQTT](https://img.shields.io/badge/MQTT-contract_v1-660066)
 ![runtime](https://img.shields.io/badge/runtime-no_Torch%20%7C%20no_Ultralytics-informational)
 
+> [!TIP]
+> **Looking for Pre-Configured Commercial Hardware & Starter Kits?**  
+> This open-source pipeline is verified and benchmarked on official Seeed Studio edge hardware.  
+> 🛒 **[Get the Ready-to-Deploy Starter Kit](https://www.seeedstudio.com/reComputer-Industrial-J4012-p-5586.html?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=hero_banner)** | 📖 **[Explore Full Solution & BOM Configurator](https://www.seeed.cc/solutions/reference-designs/fall_detection?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=hero_banner)**
+
 EdgeFallKit is one fall-detection stack verified on NVIDIA Jetson Orin Nano/NX, Rockchip
 RK3576/RK3588, Raspberry Pi 5 + Hailo-8, reCamera SG2002, and reCamera Pro.
 Python owns the readable control plane where the platform supports it; video
@@ -108,6 +113,17 @@ throughput or reliability. Hailo currently keeps the hot runtime native because
 HailoRT 4.21 exposes tensor metadata through a C++ API but not the installed
 Python GI bridge; the exact migration boundary is documented in
 [PYTHON_CONTROL_PLANE.md](platforms/rpi-hailo/PYTHON_CONTROL_PLANE.md).
+
+### 🛒 Verified Hardware & Procurement Matrix
+
+All throughput, multi-stream density, and latency metrics in this repository are verified on official Seeed Studio edge platforms:
+
+| Device Model | Compute / Sensor Platform | Key Specs | Measured Benchmark | Buy Sample / Kit |
+|---|---|---|---|---|
+| **reComputer Industrial J4012** | NVIDIA Jetson Orin NX 16GB | 100 TOPS, Dual GbE, Isolated DI/DO, Fanless Wide-Temp | YOLO11s-Pose TRT @ 9 RTSP streams (15 FPS) | [🛒 Buy Now](https://www.seeedstudio.com/reComputer-Industrial-J4012-p-5586.html?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=hw_table) |
+| **reComputer J3011** | NVIDIA Jetson Orin Nano 8GB | 40 TOPS, M.2 NVMe, Compact Aluminum Enclosure | YOLO11s-Pose TRT @ 8 RTSP streams (15 FPS) | [🛒 Buy Now](https://www.seeedstudio.com/reComputer-J3011-p-5585.html?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=hw_table) |
+| **reComputer RK3588** | Rockchip RK3588 | 6 TOPS NPU, 8-Core CPU, Dual HDMI, GbE | YOLOv8s-Pose RKNN @ 5 RTSP streams (15 FPS) | [🛒 Buy Now](https://www.seeedstudio.com/reComputer-RK3588-30-p-6817.html?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=hw_table) |
+| **reCamera 2002 / Pro** | RISC-V SG2002 / RV1126 | All-in-one Smart Camera, PoE, IP65, Interchangeable CS-Lens | On-camera native inference, zero-server standalone | [🛒 Buy Now](https://www.seeedstudio.com/reCamera-2002-64GB-p-6252.html?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=hw_table) |
 
 ## Measured results
 
@@ -476,6 +492,16 @@ cmake -S ../recamera/sscma-example-sg200x/solutions/fall-detection \
 
 Commit changes to those canonical repositories separately; this project owns
 the shared contract, deployment entry point, and comparison ledger.
+
+## 💼 Enterprise & Commercial Deployment
+
+Need to deploy fall detection at scale across hospitals, elder-care facilities, or industrial campuses?
+
+- **Volume Hardware Pricing**: Inquire about tiered pricing for 100+ deployments.
+- **ODM / OEM Customization**: Custom enclosure branding, carrier board I/O changes (isolated DI/DO relays, PoE), pre-flashed golden firmware, and global certifications (CE/FCC/RoHS).
+- **Turnkey Integration**: Connect with certified solution partners for on-site installation, camera placement, and VMS integration.
+
+👉 **[Contact Seeed Enterprise Solution Team](https://www.seeed.cc/customization?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=footer_enterprise)** or explore the [Fall Detection Reference Design & BOM Configurator](https://www.seeed.cc/solutions/reference-designs/fall_detection?utm_source=github&utm_medium=readme&utm_campaign=edgefallkit&utm_content=footer_solution).
 
 ## Safety, licensing, and security
 

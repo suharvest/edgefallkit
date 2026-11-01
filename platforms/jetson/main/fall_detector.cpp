@@ -30,6 +30,7 @@ void FallDetector::setConfig(const FallConfig& config) {
     config_.confirmation_sec = std::max(0.0f, config_.confirmation_sec);
     config_.suspected_timeout_sec = std::max(config_.confirmation_sec, config_.suspected_timeout_sec);
     config_.occlusion_grace_sec = std::max(0.0f, config_.occlusion_grace_sec);
+    config_.late_confirmation_sec = std::max(0.0f, config_.late_confirmation_sec);
     config_.recovery_torso_angle_deg = std::clamp(config_.recovery_torso_angle_deg, 1.0f, 89.0f);
     config_.recovery_aspect_ratio = std::max(1.0f, config_.recovery_aspect_ratio);
     config_.recovery_window_sec = std::max(0.0f, config_.recovery_window_sec);
@@ -46,6 +47,8 @@ void FallDetector::reset() {
     last_fast_drop_sec_ = -1.0;
     baseline_hip_y_ = 0.0f;
     have_baseline_hip_y_ = false;
+    baseline_timestamp_sec_ = -1.0;
+    gap_since_baseline_ = false;
     max_drop_distance_ = 0.0f;
     suspected_since_sec_ = -1.0;
     last_strong_evidence_sec_ = -1.0;
@@ -73,6 +76,22 @@ int FallDetector::featureCount(const FallObservation& o, float hip_speed) const 
     return count;
 }
 
+bool FallDetector::inLateLatch(double timestamp_sec) const {
+    return motion_triggered_ && suspected_since_sec_ >= 0.0 &&
+           timestamp_sec - suspected_since_sec_ <=
+               static_cast<double>(config_.suspected_timeout_sec + config_.late_confirmation_sec);
+}
+
+void FallDetector::toNormal() {
+    state_ = FallState::Normal;
+    suspected_since_sec_ = -1.0;
+    last_strong_evidence_sec_ = -1.0;
+    motion_triggered_ = false;
+    last_fast_drop_sec_ = -1.0;
+    max_drop_distance_ = 0.0f;
+    recovery_since_sec_ = -1.0;
+}
+
 void FallDetector::updateDiagnostics(const FallObservation& o, float hip_speed) {
     diagnostics_.hip_drop_speed = hip_speed;
     diagnostics_.hip_drop_distance = max_drop_distance_;
@@ -80,6 +99,14 @@ void FallDetector::updateDiagnostics(const FallObservation& o, float hip_speed) 
     diagnostics_.bbox_aspect_ratio = o.bbox_aspect_ratio;
     diagnostics_.evidence_features = featureCount(o, hip_speed);
     diagnostics_.evidence_score = static_cast<float>(diagnostics_.evidence_features) / 3.0f;
+    // Confirmation evidence: current posture features plus the motion
+    // feature, which a motion-armed Suspected candidate has latched.
+    const bool motion = hip_speed >= config_.hip_drop_speed_threshold ||
+        (state_ == FallState::Suspected && motion_triggered_);
+    diagnostics_.confirmation_features =
+        (o.torso_angle_deg >= config_.torso_angle_threshold_deg ? 1 : 0) +
+        (o.bbox_aspect_ratio >= config_.bbox_aspect_ratio_threshold ? 1 : 0) +
+        (motion ? 1 : 0);
     diagnostics_.lying_posture = isLying(o);
     diagnostics_.upright_posture = isUpright(o);
     diagnostics_.in_cooldown = o.timestamp_sec < cooldown_until_sec_;
@@ -113,19 +140,24 @@ FallOutput FallDetector::update(const FallObservation& o) {
         diagnostics_.bbox_aspect_ratio = 0.0f;
         diagnostics_.evidence_features = 0;
         diagnostics_.evidence_score = 0.0f;
+        diagnostics_.confirmation_features = 0;
         diagnostics_.lying_posture = false;
         diagnostics_.upright_posture = false;
         diagnostics_.temporal_positive = o.temporal_positive;
         diagnostics_.temporal_probability = o.temporal_probability;
+        if (have_baseline_hip_y_) {
+            gap_since_baseline_ = true;
+        }
         if (state_ == FallState::Suspected && suspected_since_sec_ >= 0.0) {
             const double suspected_for = o.timestamp_sec - suspected_since_sec_;
-            if (suspected_for > config_.suspected_timeout_sec) {
-                state_ = FallState::Normal;
-                suspected_since_sec_ = -1.0;
-                last_strong_evidence_sec_ = -1.0;
-                motion_triggered_ = false;
-                last_fast_drop_sec_ = -1.0;
-                max_drop_distance_ = 0.0f;
+            const bool recent_strong = last_strong_evidence_sec_ >= 0.0 &&
+                o.timestamp_sec - last_strong_evidence_sec_ <= config_.occlusion_grace_sec;
+            if (suspected_for > config_.suspected_timeout_sec &&
+                !(recent_strong && inLateLatch(o.timestamp_sec))) {
+                // A late-confirmation candidate survives only a short
+                // occlusion right after a lying frame.  Missing/invalid
+                // observations never originate an event.
+                toNormal();
             }
         }
         diagnostics_.in_cooldown = o.timestamp_sec < cooldown_until_sec_;
@@ -141,6 +173,8 @@ FallOutput FallDetector::update(const FallObservation& o) {
         if (state_ == FallState::Normal && !horizontal_cue) {
             baseline_hip_y_ = o.hip_y;
             have_baseline_hip_y_ = true;
+            baseline_timestamp_sec_ = o.timestamp_sec;
+            gap_since_baseline_ = false;
         }
         if (state_ == FallState::Suspected && have_baseline_hip_y_) {
             max_drop_distance_ = std::max(max_drop_distance_, o.hip_y - baseline_hip_y_);
@@ -155,48 +189,47 @@ FallOutput FallDetector::update(const FallObservation& o) {
             // must not make the persistent fall_detected level true.
             initialized_ = true;
         } else {
-            const int evidence = diagnostics_.evidence_features;
+            const int evidence = diagnostics_.confirmation_features;
             const bool lying = diagnostics_.lying_posture;
             const bool enough_evidence = evidence >= config_.min_suspected_features;
             const bool cooldown = o.timestamp_sec < cooldown_until_sec_;
 
             switch (state_) {
-                case FallState::Normal:
-                    if (!cooldown && o.temporal_available && o.temporal_positive) {
-                        state_ = FallState::Fallen;
-                        recovery_since_sec_ = -1.0;
-                        cooldown_until_sec_ = o.timestamp_sec + config_.cooldown_sec;
-                        ++event_id_;
-                        out.fall_event = true;
-                        break;
-                    }
-                    // Horizontal posture alone is not a fall: sleeping,
-                    // push-ups, and a deliberate lie-down can look identical.
-                    // Arm only on rapid descent plus a horizontal-posture cue.
-                    if (!cooldown && last_fast_drop_sec_ >= 0.0 &&
-                        o.timestamp_sec - last_fast_drop_sec_ <= config_.motion_window_sec &&
-                        (o.torso_angle_deg >= config_.torso_angle_threshold_deg ||
-                         o.bbox_aspect_ratio >= config_.bbox_aspect_ratio_threshold)) {
+                case FallState::Normal: {
+                    // Geometry is the only way out of Normal.  A
+                    // temporal-positive window on its own (e.g. somebody
+                    // sitting down quickly) must not raise an alarm without
+                    // hip-drop + horizontal arming.
+                    const bool fast_drop = last_fast_drop_sec_ >= 0.0 &&
+                        o.timestamp_sec - last_fast_drop_sec_ <= config_.motion_window_sec;
+                    const bool displaced = have_baseline_hip_y_ && gap_since_baseline_ &&
+                        o.timestamp_sec - baseline_timestamp_sec_ <=
+                            static_cast<double>(config_.motion_window_sec + config_.occlusion_grace_sec) &&
+                        o.hip_y - baseline_hip_y_ >= config_.hip_drop_distance_threshold;
+                    if (!cooldown && horizontal_cue && (fast_drop || displaced)) {
                         state_ = FallState::Suspected;
-                        suspected_since_sec_ = last_fast_drop_sec_;
+                        suspected_since_sec_ = fast_drop ? last_fast_drop_sec_ : o.timestamp_sec;
                         last_strong_evidence_sec_ = lying ? o.timestamp_sec : -1.0;
                         motion_triggered_ = true;
                         max_drop_distance_ = have_baseline_hip_y_
                             ? std::max(0.0f, o.hip_y - baseline_hip_y_) : 0.0f;
                     }
                     break;
+                }
 
                 case FallState::Suspected:
-                    if (!cooldown && o.temporal_available && o.temporal_positive) {
+                    if (lying && enough_evidence) {
+                        last_strong_evidence_sec_ = o.timestamp_sec;
+                    }
+                    if (!cooldown && o.temporal_available && o.temporal_positive &&
+                        lying && enough_evidence) {
+                        // Learned confirmation also needs the current pose lying.
                         state_ = FallState::Fallen;
                         recovery_since_sec_ = -1.0;
                         cooldown_until_sec_ = o.timestamp_sec + config_.cooldown_sec;
                         ++event_id_;
                         out.fall_event = true;
                         break;
-                    }
-                    if (lying && enough_evidence) {
-                        last_strong_evidence_sec_ = o.timestamp_sec;
                     }
                     if (!config_.temporal_confirmation_required && motion_triggered_ && lying && enough_evidence &&
                         max_drop_distance_ >= config_.hip_drop_distance_threshold &&
@@ -207,26 +240,18 @@ FallOutput FallDetector::update(const FallObservation& o) {
                         ++event_id_;
                         out.fall_event = true;
                     } else if (diagnostics_.upright_posture ||
-                               o.timestamp_sec - suspected_since_sec_ > config_.suspected_timeout_sec) {
-                        state_ = FallState::Normal;
-                        suspected_since_sec_ = -1.0;
-                        last_strong_evidence_sec_ = -1.0;
-                        motion_triggered_ = false;
-                        last_fast_drop_sec_ = -1.0;
-                        max_drop_distance_ = 0.0f;
+                               (o.timestamp_sec - suspected_since_sec_ > config_.suspected_timeout_sec &&
+                                !(lying && inLateLatch(o.timestamp_sec)))) {
+                        // Past the timeout only a still-lying candidate inside
+                        // the bounded late-confirmation latch is kept.
+                        toNormal();
                     }
                     break;
 
                 case FallState::Fallen:
                     if (diagnostics_.upright_posture) {
                         if (config_.recovery_window_sec <= 0.0f) {
-                            state_ = FallState::Normal;
-                            recovery_since_sec_ = -1.0;
-                            suspected_since_sec_ = -1.0;
-                            last_strong_evidence_sec_ = -1.0;
-                            motion_triggered_ = false;
-                            last_fast_drop_sec_ = -1.0;
-                            max_drop_distance_ = 0.0f;
+                            toNormal();
                         } else {
                             state_ = FallState::Recovering;
                             recovery_since_sec_ = o.timestamp_sec;
@@ -239,13 +264,7 @@ FallOutput FallDetector::update(const FallObservation& o) {
                         state_ = FallState::Fallen;
                         recovery_since_sec_ = -1.0;
                     } else if (o.timestamp_sec - recovery_since_sec_ >= config_.recovery_window_sec) {
-                        state_ = FallState::Normal;
-                        recovery_since_sec_ = -1.0;
-                        suspected_since_sec_ = -1.0;
-                        last_strong_evidence_sec_ = -1.0;
-                        motion_triggered_ = false;
-                        last_fast_drop_sec_ = -1.0;
-                        max_drop_distance_ = 0.0f;
+                        toNormal();
                     }
                     break;
             }

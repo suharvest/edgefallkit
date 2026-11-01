@@ -119,7 +119,9 @@ def test_file_source_releases_capture_at_eof(tmp_path):
     assert source.capture is None
 
 
-def test_temporal_positive_drives_deployed_alert(tmp_path):
+def test_temporal_positive_alone_does_not_raise_deployed_alert(tmp_path):
+    # Strict mode: the temporal gate fires on a static clip, but nothing armed
+    # the detector geometrically, so no alert is deployed.
     path = _clip(tmp_path, frames=2)
     temporal = tmp_path / "temporal.npz"
     np.savez(temporal, frame_mask=np.ones(56, np.float32), mean=np.zeros(504, np.float32),
@@ -136,7 +138,7 @@ def test_temporal_positive_drives_deployed_alert(tmp_path):
     finally:
         app.RKNNPose, app.PoseDecoder, app.RUNNING, app.time = original
     assert row["temporal_gate_trigger_sec"] == 0.0
-    assert row["deployed_alert_trigger_sec"] == 0.0
+    assert row["deployed_alert_trigger_sec"] is None
 
 
 def test_freeze_manifest_rejects_changed_identity(tmp_path):

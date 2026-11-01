@@ -122,8 +122,8 @@ static py::list decode_pose(py::iterable outputs, float confidence, float nms_th
                 d.box = {{(gx + .5f - dist[0]) * stride, (gy + .5f - dist[1]) * stride,
                           (gx + .5f + dist[2]) * stride, (gy + .5f + dist[3]) * stride}};
                 for (int k = 0; k < 17; ++k) {
-                    d.keypoints[k] = {{(kp.at(k * 3, i) * 2.0f + gx - .5f) * stride,
-                                       (kp.at(k * 3 + 1, i) * 2.0f + gy - .5f) * stride,
+                    d.keypoints[k] = {{(kp.at(k * 3, i) * 2.0f + gx) * stride,
+                                       (kp.at(k * 3 + 1, i) * 2.0f + gy) * stride,
                                        sigmoid(kp.at(k * 3 + 2, i))}};
                 }
                 detections.push_back(d);

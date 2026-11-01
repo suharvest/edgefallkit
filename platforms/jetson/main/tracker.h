@@ -52,6 +52,8 @@ private:
     std::vector<std::unique_ptr<TrackedPerson>> tracks_;
 };
 
-FallObservation observationFromPose(const TrackedPerson& track, double timestamp_sec);
+// hip_y is normalised by frame_height (Pose keypoints are source pixels).
+FallObservation observationFromPose(const TrackedPerson& track, double timestamp_sec,
+                                    int frame_height);
 
 }  // namespace jetson_fall

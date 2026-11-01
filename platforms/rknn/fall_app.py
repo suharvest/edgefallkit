@@ -52,6 +52,7 @@ try:
         Observation,
         make_observation,
         IoUTracker,
+        LocationCooldown,
         TemporalMLP,
         FallConfig,
         FallDetector,
@@ -62,6 +63,7 @@ except ImportError:
         Observation,
         make_observation,
         IoUTracker,
+        LocationCooldown,
         TemporalMLP,
         FallConfig,
         FallDetector,
@@ -151,6 +153,29 @@ def build_payload(
     }
 
 
+# First id handed out by the IoU tracker for detections without a runtime id.
+_IOU_ID_BASE = 1_000_001
+
+
+def _core_detection(d) -> tuple[CoreDetection, list]:
+    """Runtime detection (normalised centre box, 51 keypoint values) to a
+    pixel-space CoreDetection in the 640x640 model frame plus the payload bbox."""
+    kpts_raw = getattr(d, "keypoints", ())
+    if len(kpts_raw) == 51:
+        kpts = [
+            [float(kpts_raw[i * 3]) * 640.0, float(kpts_raw[i * 3 + 1]) * 640.0,
+             float(kpts_raw[i * 3 + 2])]
+            for i in range(17)
+        ]
+    else:
+        kpts = []
+    cx, cy, w, h = float(d.cx), float(d.cy), float(d.w), float(d.h)
+    box = [(cx - w / 2.0) * 640.0, (cy - h / 2.0) * 640.0,
+           (cx + w / 2.0) * 640.0, (cy + h / 2.0) * 640.0]
+    bbox = [round(cx, 4), round(cy, 4), round(w, 4), round(h, 4)]
+    return CoreDetection(box=box, score=float(d.score), keypoints=kpts), bbox
+
+
 class FallApp:
     name: str = "fall-detection"
     wants_frames: bool = True
@@ -162,6 +187,7 @@ class FallApp:
         self.topic_template: str = "recomputer/fall-detection/results/{stream_id}"
         self.keypoint_threshold: float = 0.25
         self.fall_config: FallConfig = FallConfig()
+        self.location_cooldown_sec: float = 10.0
         if options is not None:
             self.configure(options, device_id)
 
@@ -174,6 +200,7 @@ class FallApp:
         )
         self.keypoint_threshold = float(self.options.get("keypoint_threshold", 0.25))
         self.fall_config = FallConfig(**self.options.get("fall", {}))
+        self.location_cooldown_sec = float(self.options.get("location_cooldown_sec", 10.0))
 
     def analyzers(self, spec: StreamSpec) -> list[dict]:
         return []
@@ -204,39 +231,49 @@ class FallApp:
         people: list[dict] = []
         events: list[dict] = []
 
-        for idx, d in enumerate(res.detections):
-            # Keypoints handling
-            kpts_raw = getattr(d, "keypoints", ())
-            if len(kpts_raw) == 51:
-                kpts = [
-                    [
-                        float(kpts_raw[i * 3]) * 640.0,
-                        float(kpts_raw[i * 3 + 1]) * 640.0,
-                        float(kpts_raw[i * 3 + 2]),
-                    ]
-                    for i in range(17)
-                ]
-            else:
-                kpts = []
+        tracks = ctx.state.setdefault("tracks", {})
+        grace = max(0.0, float(self.fall_config.occlusion_grace))
+        iou_tracker = ctx.state.get("iou_tracker")
+        if iou_tracker is None:
+            # Detections without a runtime track id get a stable id from the
+            # IoU tracker.  Its ids start far above typical runtime ids so the
+            # two sources never collide within one stream.
+            iou_tracker = IoUTracker(0.2, grace)
+            iou_tracker.next_id = _IOU_ID_BASE
+            ctx.state["iou_tracker"] = iou_tracker
+        iou_tracker.max_lost_sec = grace
 
-            # Box in pixels [x1, y1, x2, y2]
-            cx = float(d.cx)
-            cy = float(d.cy)
-            w = float(d.w)
-            h = float(d.h)
-            score = float(d.score)
-            box = [
-                (cx - w / 2.0) * 640.0,
-                (cy - h / 2.0) * 640.0,
-                (cx + w / 2.0) * 640.0,
-                (cy + h / 2.0) * 640.0,
-            ]
-
-            core_det = CoreDetection(box=box, score=score, keypoints=kpts)
-
+        frame_items: list[tuple[int, CoreDetection, list]] = []
+        untracked: list[tuple[CoreDetection, list]] = []
+        for d in res.detections:
+            core_det, bbox = _core_detection(d)
             raw_tid = getattr(d, "track_id", 0)
-            tid = raw_tid if (isinstance(raw_tid, int) and raw_tid > 0) else (idx + 1)
+            if isinstance(raw_tid, int) and not isinstance(raw_tid, bool) and raw_tid > 0:
+                frame_items.append((raw_tid, core_det, bbox))
+            else:
+                untracked.append((core_det, bbox))
+        iou_tracks = iou_tracker.update([det for det, _ in untracked], now)
+        by_detection = {id(tr.detection): tr.track_id for tr in iou_tracks if tr.detection is not None}
+        for det, bbox in untracked:
+            frame_items.append((by_detection[id(det)], det, bbox))
 
+        visible_ids = {tid for tid, _, _ in frame_items}
+        for tid, core_det, bbox in frame_items:
+            tracks[tid] = {"last_seen": now, "box": core_det.box, "bbox": bbox, "missed": 0}
+        # Tracks not seen this frame: an invalid observation while inside the
+        # occlusion grace (state may expire, never confirm), then dropped so a
+        # later appearance cannot inherit an old alarm.
+        for tid in sorted(set(tracks) - visible_ids):
+            track = tracks[tid]
+            if now - track["last_seen"] > grace or now < track["last_seen"]:
+                del tracks[tid]
+                ctx.state["detectors"].pop(tid, None)
+                ctx.state["temporal"].pop(tid, None)
+                continue
+            track["missed"] += 1
+            frame_items.append((tid, None, track["bbox"]))
+
+        for tid, core_det, bbox in frame_items:
             if tid not in ctx.state["detectors"]:
                 ctx.state["detectors"][tid] = FallDetector(self.fall_config)
 
@@ -253,6 +290,16 @@ class FallApp:
 
             result = ctx.state["detectors"][tid].update(obs)
 
+            cooldown = ctx.state.get("location_cooldown")
+            if cooldown is None or cooldown.window_sec != max(0.0, self.location_cooldown_sec):
+                cooldown = ctx.state["location_cooldown"] = LocationCooldown(self.location_cooldown_sec)
+            box_px = tracks[tid]["box"]
+            if result["fall_event"] and cooldown.hit(tid, box_px, now, visible_ids):
+                # Same person under a new track id at a recent event: not emitted.
+                result = {**result, "fall_event": False}
+            elif result["fall_event"]:
+                cooldown.remember(tid, box_px, now)
+
             if result["fall_event"]:
                 ctx.state["global_event_id"] += 1
                 events.append({
@@ -264,33 +311,24 @@ class FallApp:
                     "global_event_id": ctx.state["global_event_id"],
                 })
 
+            visible = core_det is not None
+            kpts = core_det.keypoints if visible else []
             pose17 = (
-                [
-                    [
-                        round(p[0] / 640.0, 4),
-                        round(p[1] / 640.0, 4),
-                        round(p[2], 4),
-                    ]
-                    for p in kpts
-                ]
+                [[round(p[0] / 640.0, 4), round(p[1] / 640.0, 4), round(p[2], 4)] for p in kpts]
                 if len(kpts) == 17
                 else []
             )
-
-            bbox = [round(cx, 4), round(cy, 4), round(w, 4), round(h, 4)]
-
-            person_item = {
+            people.append({
                 "track_id": tid,
-                "person_detected": True,
-                "person_score": round(score, 4),
-                "tracking": True,
-                "missed_frames": 0,
+                "person_detected": visible,
+                "person_score": round(core_det.score, 4) if visible else 0.0,
+                "tracking": visible,
+                "missed_frames": tracks[tid]["missed"],
                 "bbox": bbox,
                 "pose17": pose17,
                 "keypoints": [],
                 **result,
-            }
-            people.append(person_item)
+            })
 
         stream_id = getattr(ctx, "stream_id", getattr(res, "stream_id", "default"))
         inference_ms = getattr(res, "inference_ms", 0.0)

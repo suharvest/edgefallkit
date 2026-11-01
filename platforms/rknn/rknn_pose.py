@@ -60,8 +60,8 @@ def decode_pose_numpy(outputs, confidence=0.35, nms_threshold=0.45, input_size=6
         boxes.append(np.stack(((gx + .5 - dist[0]) * stride, (gy + .5 - dist[1]) * stride,
                                (gx + .5 + dist[2]) * stride, (gy + .5 + dist[3]) * stride), 1))
         raw = kp.reshape(17, 3, n)[:, :, selected].astype(np.float32)
-        x = (raw[:, 0] * 2 + gx[None] - .5) * stride
-        y = (raw[:, 1] * 2 + gy[None] - .5) * stride
+        x = (raw[:, 0] * 2 + gx[None]) * stride
+        y = (raw[:, 1] * 2 + gy[None]) * stride
         c = _sigmoid(raw[:, 2])
         points.append(np.stack((x, y, c), -1).transpose(1, 0, 2)); scores_all.append(score[selected])
     if not boxes: return []

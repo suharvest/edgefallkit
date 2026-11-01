@@ -11,6 +11,7 @@
   "max_detections": 128,
   "rtsp_latency_ms": 100,
   "publish_empty_frames": false,
+  "location_cooldown_sec": 10.0,
   "tracker": {
     "iou_threshold": 0.20,
     "center_distance_threshold": 0.25,
@@ -27,6 +28,7 @@
     "confirmation_sec": 0.80,
     "suspected_timeout_sec": 1.50,
     "occlusion_grace_sec": 0.75,
+    "late_confirmation_sec": 3.20,
     "recovery_torso_angle_deg": 35.0,
     "recovery_aspect_ratio": 1.10,
     "recovery_window_sec": 2.00,

@@ -298,6 +298,8 @@ class Track:
         self.previous_hip_y: Optional[float] = None
         self.previous_timestamp: Optional[float] = None
         self.baseline_hip_y: Optional[float] = None
+        self.baseline_timestamp = -1.0
+        self.gap_since_baseline = False
         self.last_fast_drop = -1.0
         self.max_drop_distance = 0.0
         self.suspected_since = -1.0
@@ -362,15 +364,22 @@ class Track:
         threshold = float(self.config.get("keypoint_threshold", 0.25))
         hip = self._midpoint(detection.keypoints, LEFT_HIP, RIGHT_HIP, threshold)
         shoulder = self._midpoint(detection.keypoints, LEFT_SHOULDER, RIGHT_SHOULDER, threshold)
-        if hip is None:
-            visible = [p for p in detection.keypoints if p.confidence >= threshold]
-            hip = (sum(p.x for p in visible) / len(visible), sum(p.y for p in visible) / len(visible)) if visible else None
-        valid = hip is not None and bool(detection.keypoints)
-        hip_y = hip[1] if hip else 0.0
-        torso = 0.0
-        if hip and shoulder:
-            torso = math.degrees(math.atan2(abs(shoulder[0] - hip[0]), abs(shoulder[1] - hip[1])))
-        aspect = detection.w / detection.h if detection.h > 1e-6 else 0.0
+        # Valid only with both torso anchors (one side each is enough), a
+        # usable box and a defined torso angle, as kit/logic/geometry.py
+        # make_observation.  No keypoint-centroid stand-in for the hip.
+        torso = None
+        if hip is not None and shoulder is not None and detection.h > 1e-6:
+            dx, dy = shoulder[0] - hip[0], shoulder[1] - hip[1]
+            if abs(dx) >= 1e-6 or abs(dy) >= 1e-6:
+                torso = math.degrees(math.atan2(abs(dx), abs(dy)))
+                if not math.isfinite(torso):
+                    torso = None
+        if torso is None:
+            return FallFeatures(valid=False, person_score=detection.score,
+                                hip_drop_distance=self.max_drop_distance)
+        valid = True
+        hip_y = hip[1]
+        aspect = detection.w / detection.h
         speed = 0.0
         if valid and self.previous_hip_y is not None and self.previous_timestamp is not None:
             dt = timestamp - self.previous_timestamp
@@ -399,13 +408,6 @@ class Track:
         self.age += 1 if self.age else 1
         self.missed = 0
         current = self._features(detection, timestamp)
-        if self.state == "normal" and not current.lying_posture:
-            self.baseline_hip_y = current.hip_y
-        if self.state == "suspected" and self.baseline_hip_y is not None:
-            self.max_drop_distance = max(self.max_drop_distance, current.hip_y - self.baseline_hip_y)
-            current.hip_drop_distance = self.max_drop_distance
-        if current.hip_drop_speed >= self._number("hip_drop_speed_threshold", 0.25):
-            self.last_fast_drop = timestamp
         temporal = self.bridge.temporal_update(
             self.temporal, detection.keypoints, frame_width, frame_height,
             current.hip_y, current.torso_angle_deg, current.bbox_aspect_ratio,
@@ -413,6 +415,23 @@ class Track:
         )
         current.temporal_probability = float(temporal.probability)
         current.temporal_positive = bool(temporal.positive)
+        if not current.valid:
+            # A detected person without a usable pose is handled like a miss:
+            # hip history, baseline and the state machine are left untouched
+            # (a hip_y of 0 here used to look like a fast drop afterwards).
+            self._apply_invalid(current, timestamp)
+            return
+        horizontal_cue = (current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0) or
+                          current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25))
+        if self.state == "normal" and not horizontal_cue:
+            self.baseline_hip_y = current.hip_y
+            self.baseline_timestamp = timestamp
+            self.gap_since_baseline = False
+        if self.state == "suspected" and self.baseline_hip_y is not None:
+            self.max_drop_distance = max(self.max_drop_distance, current.hip_y - self.baseline_hip_y)
+            current.hip_drop_distance = self.max_drop_distance
+        if current.hip_drop_speed >= self._number("hip_drop_speed_threshold", 0.25):
+            self.last_fast_drop = timestamp
         self._advance(current, timestamp)
         self.features = current
         self.last_timestamp = timestamp
@@ -421,7 +440,6 @@ class Track:
         self.initialized = True
 
     def update_missing(self, timestamp: float, frame_width: int, frame_height: int) -> None:
-        self.fall_event = False
         self.missed += 1
         temporal = self.bridge.temporal_update(
             self.temporal, [], frame_width, frame_height, 0.0, 0.0, 0.0,
@@ -430,20 +448,25 @@ class Track:
         current = FallFeatures(valid=False, temporal_probability=float(temporal.probability),
                                temporal_positive=bool(temporal.positive),
                                hip_drop_distance=self.max_drop_distance)
+        self._apply_invalid(current, timestamp)
+
+    def _apply_invalid(self, current: FallFeatures, timestamp: float) -> None:
+        """Missing or invalid pose: retain or expire state, never confirm."""
+        self.fall_event = False
+        if self.baseline_hip_y is not None:
+            self.gap_since_baseline = True
         if self.state == "suspected" and self.suspected_since >= 0.0:
             # Keep the temporal window warm, but do not create an event from a
-            # missed/stale track. A reacquired visible pose can confirm using
-            # the retained history on its next update.
+            # missed/invalid pose in any mode. A reacquired valid pose can
+            # confirm using the retained history on its next update.
             age = timestamp - self.suspected_since
             recent = self.last_strong_evidence >= 0.0 and timestamp - self.last_strong_evidence <= self._number("occlusion_grace_sec", 0.75)
-            if (not self.temporal_confirmation_required and self._geometry_confirmation_ready(timestamp, recent=recent)):
-                # Legacy compatibility only.  The normal configuration never
-                # reaches this branch: geometry may arm suspicion, but cannot
-                # confirm a fall.
-                self._trigger(timestamp)
-            elif age > self._number("suspected_timeout_sec", 1.5):
+            if age > self._number("suspected_timeout_sec", 1.5) and not (recent and self._in_late_latch(timestamp)):
+                # A late-confirmation candidate survives only a short
+                # occlusion right after a lying frame.
                 self._reset_suspicion()
         current.lying_posture = False
+        current.hip_drop_distance = self.max_drop_distance
         self.features = current
         self.last_timestamp = timestamp
 
@@ -455,23 +478,13 @@ class Track:
         self.last_fast_drop = -1.0
         self.max_drop_distance = 0.0
 
-    def _geometry_confirmation_ready(self, timestamp: float, *, recent: Optional[bool] = None) -> bool:
-        """Return the old geometry confirmation predicate.
-
-        This is intentionally isolated behind ``temporal_confirmation_required``
-        so the production path cannot accidentally regress to a geometry-only
-        fall alarm when thresholds are changed.
-        """
-        if self.temporal_confirmation_required or self.suspected_since < 0.0:
-            return False
-        if recent is None:
-            recent = (self.last_strong_evidence >= 0.0 and
-                      timestamp - self.last_strong_evidence <= self._number("occlusion_grace_sec", 0.75))
-        return bool(
-            self.motion_triggered and recent and
-            self.max_drop_distance >= self._number("hip_drop_distance_threshold", 0.02) and
-            timestamp - self.suspected_since >= self._number("confirmation_sec", 0.80)
-        )
+    def _in_late_latch(self, timestamp: float) -> bool:
+        """Bounded window after ``suspected_timeout_sec`` during which a
+        still-lying candidate may be confirmed by a late temporal positive
+        (3.2 s: the 48-frame learned window at 15 fps)."""
+        return bool(self.motion_triggered and self.suspected_since >= 0.0 and
+                    timestamp - self.suspected_since <= self._number("suspected_timeout_sec", 1.5) +
+                    self._number("late_confirmation_sec", 3.2))
 
     def _temporal_confirmation_ready(self, feature: FallFeatures) -> bool:
         """Require learned positivity after at least one prior observation."""
@@ -485,31 +498,54 @@ class Track:
         self.fall_event = False
         if not self.initialized:
             # A first-frame lying pose is not a fall event.  There is no prior
-            # motion context yet.  Even an optimistic/future temporal bridge
-            # must observe at least one prior frame before it may confirm.
-            if not self.temporal_confirmation_required and self._geometry_confirmation_ready(timestamp):
-                self._trigger(timestamp)
-            elif self._temporal_confirmation_ready(current) and timestamp >= self.cooldown_until:
-                self._trigger(timestamp)
+            # motion context yet, so neither geometry nor an optimistic/future
+            # temporal bridge may originate an event here.
             return
         cooldown = timestamp < self.cooldown_until
+        # Confirmation evidence: current posture features plus the motion
+        # feature, which a motion-armed suspected candidate has latched (a
+        # victim lying still after impact has ~0 current hip speed).
+        motion = (current.hip_drop_speed >= self._number("hip_drop_speed_threshold", 0.25) or
+                  (self.state == "suspected" and self.motion_triggered))
+        confirmation_features = (int(current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0)) +
+                                 int(current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25)) +
+                                 int(motion))
+        enough = confirmation_features >= int(self.fall_cfg.get("min_suspected_features", 2))
         if self.state == "normal":
-            if not cooldown and self._temporal_confirmation_ready(current):
-                self._trigger(timestamp)
-            elif not cooldown and self.last_fast_drop >= 0.0 and timestamp - self.last_fast_drop <= self._number("motion_window_sec", 0.75) and (current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0) or current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25)):
+            # Geometry is the only way out of normal.  A temporal-positive
+            # window on its own (e.g. somebody sitting down quickly) must not
+            # raise an alarm without hip-drop + horizontal arming.
+            fast_drop = (self.last_fast_drop >= 0.0 and
+                         timestamp - self.last_fast_drop <= self._number("motion_window_sec", 0.75))
+            displaced = (self.baseline_hip_y is not None and self.gap_since_baseline and
+                         timestamp - self.baseline_timestamp <= self._number("motion_window_sec", 0.75) +
+                         self._number("occlusion_grace_sec", 0.75) and
+                         current.hip_y - self.baseline_hip_y >= self._number("hip_drop_distance_threshold", 0.02))
+            horizontal_cue = (current.torso_angle_deg >= self._number("torso_angle_threshold_deg", 55.0) or
+                              current.bbox_aspect_ratio >= self._number("bbox_aspect_ratio_threshold", 1.25))
+            if not cooldown and horizontal_cue and (fast_drop or displaced):
                 self.state = "suspected"
-                self.suspected_since = self.last_fast_drop
+                self.suspected_since = self.last_fast_drop if fast_drop else timestamp
                 self.last_strong_evidence = timestamp if current.lying_posture else -1.0
                 self.motion_triggered = True
                 self.max_drop_distance = max(0.0, current.hip_y - (self.baseline_hip_y or current.hip_y))
         elif self.state == "suspected":
-            if not cooldown and self._temporal_confirmation_ready(current):
-                self._trigger(timestamp)
-            elif current.lying_posture and current.evidence_features >= int(self.fall_cfg.get("min_suspected_features", 2)):
+            if current.lying_posture and enough:
                 self.last_strong_evidence = timestamp
-                if self._geometry_confirmation_ready(timestamp):
-                    self._trigger(timestamp)
-            elif current.upright_posture or timestamp - self.suspected_since > self._number("suspected_timeout_sec", 1.5):
+            if (not cooldown and self._temporal_confirmation_ready(current) and
+                    current.lying_posture and enough):
+                # Learned confirmation also needs the current pose lying.
+                self._trigger(timestamp)
+            elif (not self.temporal_confirmation_required and self.motion_triggered and
+                  current.lying_posture and enough and
+                  self.max_drop_distance >= self._number("hip_drop_distance_threshold", 0.02) and
+                  timestamp - self.suspected_since >= self._number("confirmation_sec", 0.80)):
+                self._trigger(timestamp)
+            elif (current.upright_posture or
+                  (timestamp - self.suspected_since > self._number("suspected_timeout_sec", 1.5) and
+                   not (current.lying_posture and self._in_late_latch(timestamp)))):
+                # Past the timeout only a still-lying candidate inside the
+                # bounded late-confirmation latch is kept.
                 self._reset_suspicion()
         elif self.state == "fallen":
             if current.upright_posture:
@@ -562,6 +598,52 @@ class Track:
         }
 
 
+# Radius of a "same place" match, as a multiple of the larger box side.
+LOCATION_RADIUS_SCALE = 0.75
+# Upper bound on remembered emitted events (expired ones are dropped first).
+RECENT_FALLS_MAX = 32
+
+
+def boxes_near(a, b) -> bool:
+    """Box centres (x1, y1, x2, y2) within 0.75 x the larger box side."""
+    ax1, ay1, ax2, ay2 = (float(v) for v in a[:4])
+    bx1, by1, bx2, by2 = (float(v) for v in b[:4])
+    side = max(ax2 - ax1, ay2 - ay1, bx2 - bx1, by2 - by1, 0.0)
+    dx = (ax1 + ax2 - bx1 - bx2) * 0.5
+    dy = (ay1 + ay2 - by1 - by2) * 0.5
+    return math.hypot(dx, dy) <= LOCATION_RADIUS_SCALE * side
+
+
+class LocationCooldown:
+    """Suppress a fall edge that re-detects a recent event under a new id.
+
+    Same rule as reCamera Pro apps/fall-detection/app.py: an edge is
+    suppressed only when an event EMITTED within the last ``window_sec`` lies
+    nearby AND that event's track is not visible in the current frame (its
+    identity was lost).  An event whose track is still visible, or one from
+    this same frame, is a different person.  The window runs from the emitted
+    event only; suppressed edges do not extend it.
+    """
+
+    def __init__(self, window_sec: float = 10.0):
+        self.window_sec = max(0.0, float(window_sec))
+        self.recent: list = []
+
+    def hit(self, track_id, box, now: float, visible_ids) -> bool:
+        if self.window_sec <= 0.0:
+            self.recent = []
+            return False
+        self.recent = [f for f in self.recent if 0.0 <= now - f[0] <= self.window_sec]
+        return any(ts < now and tid != track_id and tid not in visible_ids and boxes_near(b, box)
+                   for ts, b, tid in self.recent)
+
+    def remember(self, track_id, box, now: float) -> None:
+        if self.window_sec <= 0.0:
+            return
+        self.recent.append((now, list(box), track_id))
+        del self.recent[:-RECENT_FALLS_MAX]
+
+
 class MultiPersonTracker:
     def __init__(self, bridge: TrtBridge, config: dict[str, Any]):
         self.bridge = bridge
@@ -572,6 +654,7 @@ class MultiPersonTracker:
         self.max_missed = int(tracker_config.get("max_missed_frames", 8))
         self.tracks: list[Track] = []
         self.next_id = 1
+        self.location_cooldown = LocationCooldown(float(config.get("location_cooldown_sec", 10.0)))
 
     def update(self, detections: list[Detection], timestamp: float,
                frame_width: int, frame_height: int) -> list[Track]:
@@ -613,6 +696,19 @@ class MultiPersonTracker:
             else:
                 track.close()
         self.tracks = survivors
+        visible_ids = {track.track_id for track in self.tracks if track.missed == 0}
+        for track in self.tracks:
+            if not track.fall_event:
+                continue
+            box = track.box
+            xyxy = (box.x - box.w / 2, box.y - box.h / 2, box.x + box.w / 2, box.y + box.h / 2)
+            if self.location_cooldown.hit(track.track_id, xyxy, timestamp, visible_ids):
+                # Same person under a new track id at a recent event: logged,
+                # not emitted (the per-track state stays fallen).
+                print(f"suppressed fall track={track.track_id} (location cooldown)", file=sys.stderr)
+                track.fall_event = False
+            else:
+                self.location_cooldown.remember(track.track_id, xyxy, timestamp)
         # Keep short-lived unmatched tracks in the result so a post-impact
         # pose loss can still publish the person's fall event.  Their
         # `tracking`/`person_detected` fields are false until reacquired.

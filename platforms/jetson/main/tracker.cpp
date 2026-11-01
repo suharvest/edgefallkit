@@ -13,47 +13,52 @@ float centerDistance(const DetectionBox& a, const DetectionBox& b) {
     return std::sqrt(dx * dx + dy * dy);
 }
 
-float midpointX(const Pose& pose, Joint a, Joint b) {
-    if (pose.visible(a) && pose.visible(b)) {
-        return (pose.at(a).x + pose.at(b).x) * 0.5f;
+// Midpoint of two joints in source pixels; one visible side is used alone
+// (as kit/logic/geometry.py midpoint()).  False when neither side is visible.
+bool midpoint(const Pose& pose, Joint a, Joint b, Point2f& out) {
+    const bool va = pose.visible(a);
+    const bool vb = pose.visible(b);
+    if (va && vb) {
+        out = {(pose.at(a).x + pose.at(b).x) * 0.5f, (pose.at(a).y + pose.at(b).y) * 0.5f};
+        return true;
     }
-    if (pose.visible(a)) return pose.at(a).x;
-    if (pose.visible(b)) return pose.at(b).x;
-    return 0.0f;
-}
-
-float midpointY(const Pose& pose, Joint a, Joint b) {
-    if (pose.visible(a) && pose.visible(b)) {
-        return (pose.at(a).y + pose.at(b).y) * 0.5f;
-    }
-    if (pose.visible(a)) return pose.at(a).y;
-    if (pose.visible(b)) return pose.at(b).y;
-    return 0.0f;
+    if (va) { out = pose.at(a); return true; }
+    if (vb) { out = pose.at(b); return true; }
+    return false;
 }
 
 }  // namespace
 
-FallObservation observationFromPose(const TrackedPerson& track, double timestamp_sec) {
+FallObservation observationFromPose(const TrackedPerson& track, double timestamp_sec,
+                                    int frame_height) {
     FallObservation observation;
     observation.timestamp_sec = timestamp_sec;
     observation.person_score = track.score;
-    observation.valid = !track.pose.empty() && track.score > 0.0f;
-    if (!observation.valid) return observation;
-
-    const float hip_x = midpointX(track.pose, Joint::LeftHip, Joint::RightHip);
-    const float hip_y = midpointY(track.pose, Joint::LeftHip, Joint::RightHip);
-    const float shoulder_x = midpointX(track.pose, Joint::LeftShoulder, Joint::RightShoulder);
-    const float shoulder_y = midpointY(track.pose, Joint::LeftShoulder, Joint::RightShoulder);
-    observation.hip_y = hip_y;
-    const float dx = shoulder_x - hip_x;
-    const float dy = shoulder_y - hip_y;
-    if (std::hypot(dx, dy) > 1e-3f) {
-        // Angle away from vertical, independent of image aspect ratio because
-        // Pose stores source pixels.  The y axis points down in image space.
-        observation.torso_angle_deg = std::atan2(std::abs(dx), std::abs(dy)) *
-                                      180.0f / 3.14159265358979323846f;
+    // Valid only with both torso anchors (one side each is enough), a usable
+    // box and a defined torso angle; otherwise the frame is "no pose" and can
+    // only retain or expire state.
+    if (track.pose.empty() || track.score <= 0.0f || frame_height <= 0 ||
+        !(track.box.h > 1e-6f)) {
+        return observation;
     }
-    observation.bbox_aspect_ratio = track.box.h > 1e-6f ? track.box.w / track.box.h : 0.0f;
+    Point2f hip, shoulder;
+    if (!midpoint(track.pose, Joint::LeftHip, Joint::RightHip, hip) ||
+        !midpoint(track.pose, Joint::LeftShoulder, Joint::RightShoulder, shoulder)) {
+        return observation;
+    }
+    const float dx = shoulder.x - hip.x;
+    const float dy = shoulder.y - hip.y;
+    if (std::abs(dx) < 1e-6f && std::abs(dy) < 1e-6f) return observation;
+    // Angle away from vertical, independent of image aspect ratio because
+    // Pose stores source pixels.  The y axis points down in image space.
+    const float angle = std::atan2(std::abs(dx), std::abs(dy)) * 180.0f / 3.14159265358979323846f;
+    if (!std::isfinite(angle)) return observation;
+    observation.valid = true;
+    // Pose stores pixels; the state machine and the temporal frame expect
+    // hip_y normalised to [0,1] by the frame height.
+    observation.hip_y = hip.y / static_cast<float>(frame_height);
+    observation.torso_angle_deg = angle;
+    observation.bbox_aspect_ratio = track.box.w / track.box.h;
     return observation;
 }
 
@@ -124,7 +129,7 @@ std::vector<TrackedPerson*> MultiPersonTracker::update(
             track = tracks_.back().get();
         }
 
-        track->observation = observationFromPose(*track, timestamp_sec);
+        track->observation = observationFromPose(*track, timestamp_sec, frame_height);
         const auto temporal = track->temporal.update(
             makeTemporalFrame(&track->pose, track->observation, frame_width, frame_height),
             timestamp_sec);

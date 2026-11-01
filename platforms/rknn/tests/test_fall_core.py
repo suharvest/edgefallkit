@@ -2,7 +2,39 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from fall_core import FallConfig,FallDetector,Observation
+import tempfile
+import numpy as np
+from fall_core import LocationCooldown as LC,Detection,FallConfig,FallDetector,Observation,TemporalMLP,make_observation
+
+
+def obs(ts,hip,torso,aspect,valid=True,positive=False):
+    return Observation(valid,ts,hip,torso,aspect,.9,True,positive,.99 if positive else .1)
+
+def replay(d,frames,positive_from=0.0):
+    outs=[]
+    for f in frames:
+        ts,hip,torso,aspect,*rest=f
+        valid=rest[0] if rest else True
+        outs.append(d.update(obs(ts,hip,torso,aspect,valid,ts>=positive_from)))
+    return outs
+
+STAND=(8.0,.45); LIE=(80.0,2.45)
+
+def fall_frames(t_fall,n,fall_sec=.4,hip0=.45,hip1=.75,stand_up_at=None,gap=None):
+    for i in range(n):
+        ts=i/15.0
+        if stand_up_at is not None and ts>=stand_up_at:
+            hip,(torso,aspect)=hip0,STAND
+        elif ts<t_fall:
+            hip,(torso,aspect)=hip0,STAND
+        elif fall_sec>0 and ts<t_fall+fall_sec:
+            k=(ts-t_fall)/fall_sec
+            hip=hip0+(hip1-hip0)*k
+            torso=STAND[0]+(LIE[0]-STAND[0])*k
+            aspect=STAND[1]+(LIE[1]-STAND[1])*k
+        else:
+            hip,(torso,aspect)=hip1,LIE
+        yield ts,hip,torso,aspect,not(gap and gap[0]<=ts<gap[1])
 
 
 class FallCoreTest(unittest.TestCase):
@@ -11,24 +43,184 @@ class FallCoreTest(unittest.TestCase):
         out=d.update(Observation(False,1.0,temporal_available=True,temporal_positive=True,temporal_probability=.99))
         self.assertEqual(out["state"], "normal"); self.assertFalse(out["fall_event"])
 
-    def test_valid_temporal_can_alarm(self):
+    def test_temporal_only_confirms_armed_lying_candidate(self):
+        # Replaces the old NORMAL->FALLEN assertion: a temporal positive in
+        # NORMAL must do nothing; it confirms only a suspected lying candidate.
         d=FallDetector(FallConfig())
-        out=d.update(Observation(True,1.0,.5,70,1.5,.9,True,True,.99))
+        out=d.update(obs(0.0,.5,70,1.5,positive=True))
+        self.assertEqual(out["state"], "normal"); self.assertFalse(out["fall_event"])
+        d.update(obs(0.0,.30,5,.5))
+        armed=d.update(obs(.1,.50,70,1.5))
+        self.assertEqual(armed["state"], "suspected")
+        out=d.update(obs(1.0,.52,70,1.5,positive=True))
         self.assertEqual(out["state"], "fallen"); self.assertTrue(out["fall_event"])
 
     def test_default_geometry_only_cannot_confirm(self):
         d=FallDetector(FallConfig())
-        d.update(Observation(True,0.0,.30,5,.5,.9))
-        d.update(Observation(True,.1,.50,70,1.5,.9))
-        out=d.update(Observation(True,1.0,.52,70,1.5,.9))
+        d.update(obs(0.0,.30,5,.5))
+        d.update(obs(.1,.50,70,1.5))
+        out=d.update(obs(1.0,.52,70,1.5))
         self.assertEqual(out["state"], "suspected"); self.assertFalse(out["fall_event"])
 
     def test_explicit_legacy_geometry_can_confirm(self):
         d=FallDetector(FallConfig(temporal_confirmation_required=False))
-        d.update(Observation(True,0.0,.30,5,.5,.9))
-        d.update(Observation(True,.1,.50,70,1.5,.9))
-        out=d.update(Observation(True,1.0,.52,70,1.5,.9))
+        d.update(obs(0.0,.30,5,.5))
+        d.update(obs(.1,.50,70,1.5))
+        out=d.update(obs(1.0,.52,70,1.5))
         self.assertEqual(out["state"], "fallen"); self.assertTrue(out["fall_event"])
+
+    def test_legacy_invalid_frames_never_originate_event(self):
+        # Legacy geometry-only mode: stand, fall, then the pose goes invalid.
+        # The hard invariant holds in every mode: an invalid/missing
+        # observation can never originate a fall event.
+        d=FallDetector(FallConfig(temporal_confirmation_required=False))
+        frames=list(fall_frames(1.0,150,gap=(1.5,10.0)))
+        outs=replay(d,frames,positive_from=1e9)  # temporal never positive
+        invalid=[o for o,(ts,hip,torso,aspect,valid) in zip(outs,frames) if not valid]
+        self.assertTrue(invalid)
+        self.assertFalse(any(o["fall_event"] for o in invalid))
+        self.assertFalse(any(o["fall_event"] for o in outs))
+
+    def test_upright_person_with_temporal_positive_never_alarms(self):
+        d=FallDetector(FallConfig())
+        outs=replay(d,[(i/15.0,.45,8.0,.45) for i in range(150)])
+        self.assertFalse(any(o["fall_event"] for o in outs))
+        self.assertEqual({o["state"] for o in outs},{"normal"})
+
+    def test_sit_down_with_temporal_positive_never_alarms(self):
+        d=FallDetector(FallConfig())
+        frames=[]
+        for i in range(150):
+            ts=i/15.0
+            if ts<1.0: hip,torso,aspect=.45,8.0,.45
+            elif ts<1.8:
+                k=(ts-1.0)/.8; hip,torso,aspect=.45+.2*k,8.0+22.0*k,.45+.9*k
+            else: hip,torso,aspect=.65,30.0,1.35
+            frames.append((ts,hip,torso,aspect))
+        outs=replay(d,frames,positive_from=1.2)
+        self.assertFalse(any(o["fall_event"] for o in outs))
+        self.assertNotIn("fallen",{o["state"] for o in outs})
+
+    def test_real_fall_with_temporal_positive_alarms_once(self):
+        d=FallDetector(FallConfig())
+        outs=replay(d,list(fall_frames(1.0,150)),positive_from=1.6)
+        edges=[i for i,o in enumerate(outs) if o["fall_event"]]
+        self.assertEqual(len(edges),1); self.assertEqual(outs[edges[0]]["event_id"],1)
+        self.assertEqual(outs[edges[0]-1]["state"],"suspected")
+
+    def test_occluded_fall_arms_by_displacement_and_alarms_once(self):
+        d=FallDetector(FallConfig())
+        frames=list(fall_frames(1.0,150,fall_sec=0.0,hip0=.40,hip1=.60,gap=(1.0,2.0)))
+        outs=replay(d,frames,positive_from=2.4)
+        speeds=[o["features"]["hip_drop_speed"] for o in outs]
+        self.assertLess(max(speeds),.25)
+        self.assertEqual(sum(o["fall_event"] for o in outs),1)
+
+    def test_late_temporal_positive_while_still_lying_confirms_once(self):
+        d=FallDetector(FallConfig())
+        outs=replay(d,list(fall_frames(1.0,150)),positive_from=4.0)
+        self.assertEqual(sum(o["fall_event"] for o in outs),1)
+
+    def test_late_temporal_positive_after_standing_up_does_not_alarm(self):
+        d=FallDetector(FallConfig())
+        outs=replay(d,list(fall_frames(1.0,150,stand_up_at=3.0)),positive_from=4.0)
+        self.assertFalse(any(o["fall_event"] for o in outs))
+        self.assertEqual(outs[-1]["state"],"normal")
+
+    def test_min_features_three_confirms_stationary_lying_victim(self):
+        d=FallDetector(FallConfig(min_suspected_features=3))
+        outs=replay(d,list(fall_frames(1.0,150)),positive_from=1.9)
+        edges=[o for o in outs if o["fall_event"]]
+        self.assertEqual(len(edges),1)
+        self.assertEqual(edges[0]["features"]["hip_drop_speed"],0.0)
+
+
+def person(hip_conf=.9,shoulder_conf=.9,box=(200,100,300,400)):
+    kp=[[250.0,200.0,.9] for _ in range(17)]
+    kp[5]=[240.0,150.0,shoulder_conf]; kp[6]=[260.0,150.0,0.0]
+    kp[11]=[240.0,300.0,hip_conf]; kp[12]=[260.0,300.0,0.0]
+    return Detection(list(box),.8,kp)
+
+
+class ReferenceAlignmentTest(unittest.TestCase):
+    def test_clamp_matches_reference_bounds(self):
+        cfg=FallConfig(hip_drop_speed=-1,torso_angle=120,aspect=.5,min_suspected_features=7,
+                       confirmation=2.0,suspected_timeout=1.0,recovery_angle=0,
+                       recovery_aspect=.2,cooldown=-3,late_confirmation=-1).clamp()
+        self.assertEqual((cfg.hip_drop_speed,cfg.torso_angle,cfg.aspect),(0.0,89.0,1.0))
+        self.assertEqual(cfg.min_suspected_features,3)
+        self.assertEqual(cfg.suspected_timeout,2.0)
+        self.assertEqual((cfg.recovery_angle,cfg.recovery_aspect),(1.0,1.0))
+        self.assertEqual((cfg.cooldown,cfg.late_confirmation),(0.0,0.0))
+
+    def test_detector_clamps_a_private_copy(self):
+        shared=FallConfig(min_suspected_features=0)
+        d=FallDetector(shared)
+        self.assertEqual(d.cfg.min_suspected_features,1)
+        self.assertEqual(shared.min_suspected_features,0)
+
+    def test_observation_one_side_fallback_and_normalised_hip(self):
+        o=make_observation(person(),0.0,640,480)
+        self.assertTrue(o.valid)
+        self.assertAlmostEqual(o.hip_y,300/480)
+        self.assertFalse(make_observation(person(shoulder_conf=0),0.0,640,480).valid)
+        self.assertFalse(make_observation(person(box=(200,100,300,100)),0.0,640,480).valid)
+
+    def test_undefined_torso_angle_is_invalid(self):
+        det=person(); det.keypoints[5]=[240.0,300.0,.9]
+        self.assertFalse(make_observation(det,0.0,640,480).valid)
+
+    def test_recovery_returns_to_normal_through_full_reset(self):
+        d=FallDetector(FallConfig())
+        replay(d,list(fall_frames(1.0,60)),positive_from=1.6)
+        self.assertEqual(d.state,"fallen")
+        for i in range(60,120):
+            d.update(obs(i/15.0,.45,8.0,.45))
+        self.assertEqual(d.state,"normal")
+        self.assertEqual((d.motion_triggered,d.last_drop,d.suspected_since,d.max_drop),(False,-1.0,-1.0,0.0))
+
+    def test_present_but_invalid_pose_fills_keypoints_with_valid_flag_zero(self):
+        det=person(shoulder_conf=0)
+        o=make_observation(det,0.0,640,480)
+        frame=TemporalMLP.pose_frame(det,o,640,480)
+        self.assertFalse(o.valid)
+        self.assertEqual(frame[-1],0.0)
+        self.assertGreater(np.abs(frame[:34]).sum(),0.0)
+        self.assertFalse(TemporalMLP.pose_frame(None,o,640,480).any())
+
+    def test_temporal_window_trim_and_backward_timestamp_reset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"t.npz"
+            np.savez(path,frame_mask=np.ones(56,np.float32),mean=np.zeros(504,np.float32),
+                     scale=np.ones(504,np.float32),w1=np.zeros((504,1),np.float32),
+                     b1=np.zeros(1,np.float32),w2=np.ones(1,np.float32),b2=0.0,
+                     threshold=.5,consecutive=1,window=48)
+            t=TemporalMLP(str(path))
+            for i in range(120):
+                t.update(np.zeros(56,np.float32),i/15.0)
+            span=t.frames[-1][0]-t.frames[1][0]
+            self.assertLessEqual(span,47/15.0+0.5+1e-6)
+            t.update(np.zeros(56,np.float32),1.0)
+            self.assertEqual(len(t.frames),1)
+
+    def test_location_cooldown_rules(self):
+        lc=LC(10.0)
+        box=(100,100,200,300)
+        self.assertFalse(lc.hit(1,box,0.0,{1}))
+        lc.remember(1,box,0.0)
+        # Same place, new id, old track gone -> suppressed.
+        self.assertTrue(lc.hit(2,(110,110,210,310),2.0,{2}))
+        # Old track still visible -> a different person.
+        self.assertFalse(lc.hit(2,(110,110,210,310),2.0,{1,2}))
+        # Far away (> 0.75 x larger side = 150 px) -> not suppressed.
+        self.assertFalse(lc.hit(2,(400,100,500,300),2.0,{2}))
+        # Same frame as the emitted event -> not suppressed.
+        self.assertFalse(lc.hit(2,box,0.0,{2}))
+        # Suppressed edges do not extend the window: expires 10 s after emit.
+        self.assertTrue(lc.hit(3,box,9.9,{3}))
+        self.assertFalse(lc.hit(4,box,10.1,{4}))
+        disabled=LC(0.0); disabled.remember(1,box,0.0)
+        self.assertFalse(disabled.hit(2,box,1.0,{2}))
 
 
 if __name__ == "__main__": unittest.main()

@@ -19,18 +19,27 @@ float iou(const Box&a,const Box&b){
   const float inter=std::max(0.f,r-l)*std::max(0.f,d-t);
   return inter/std::max(1e-9f,a.w*a.h+b.w*b.h-inter);
 }
+// Model input side: Pose keypoints are stored in 640x640 model pixels.
+constexpr int kPoseFrameSide = 640;
 FallObservation observationFrom(const Track&t,double ts){
   FallObservation o; o.timestamp_sec=ts; o.person_score=t.score;
+  // Valid only with both torso anchors (one side each is enough, as
+  // kit/logic/geometry.py), a usable box and a defined torso angle.
   const bool hip=t.pose.visible(jetson_fall::Joint::LeftHip)||t.pose.visible(jetson_fall::Joint::RightHip);
   const bool shoulder=t.pose.visible(jetson_fall::Joint::LeftShoulder)||t.pose.visible(jetson_fall::Joint::RightShoulder);
-  o.valid=!t.pose.empty() && t.score>0 && hip && shoulder;
-  if(!o.valid) return o;
+  if(t.pose.empty() || t.score<=0 || !hip || !shoulder || !(t.box.h>1e-6f)) return o;
   const float hx=mid(t.pose,jetson_fall::Joint::LeftHip,jetson_fall::Joint::RightHip,false);
   const float hy=mid(t.pose,jetson_fall::Joint::LeftHip,jetson_fall::Joint::RightHip,true);
   const float sx=mid(t.pose,jetson_fall::Joint::LeftShoulder,jetson_fall::Joint::RightShoulder,false);
   const float sy=mid(t.pose,jetson_fall::Joint::LeftShoulder,jetson_fall::Joint::RightShoulder,true);
-  o.hip_y=hy; o.torso_angle_deg=std::atan2(std::abs(sx-hx),std::abs(sy-hy))*180.f/3.14159265f;
-  o.bbox_aspect_ratio=t.box.h>1e-6f?t.box.w/t.box.h:0; return o;
+  if(std::abs(sx-hx)<1e-6f && std::abs(sy-hy)<1e-6f) return o;
+  const float angle=std::atan2(std::abs(sx-hx),std::abs(sy-hy))*180.f/3.14159265f;
+  if(!std::isfinite(angle)) return o;
+  o.valid=true;
+  // Normalise to [0,1]: the fall thresholds and the temporal frame use
+  // normalised hip_y, Pose stores pixels.
+  o.hip_y=hy/static_cast<float>(kPoseFrameSide); o.torso_angle_deg=angle;
+  o.bbox_aspect_ratio=t.box.w/t.box.h; return o;
 }
 std::vector<Track*> Tracker::update(const std::vector<Detection>& ds,double ts){
   std::vector<int> assignment(ds.size(),-1); std::vector<bool> used(tracks_.size(),false);
@@ -41,10 +50,15 @@ std::vector<Track*> Tracker::update(const std::vector<Detection>& ds,double ts){
   std::sort(ms.begin(),ms.end(),[](auto&a,auto&b){return a.s>b.s;});
   for(auto&m:ms)if(assignment[m.d]<0&&!used[m.t]){assignment[m.d]=(int)m.t;used[m.t]=true;}
   for(size_t d=0;d<ds.size();++d){Track* t=nullptr;
-    if(assignment[d]>=0)t=tracks_[assignment[d]].get(); else {auto n=std::make_unique<Track>();n->id=next_id_++;tracks_.push_back(std::move(n));t=tracks_.back().get();}
-    t->box=ds[d].box;t->score=ds[d].box.score;t->pose=Pose(ds[d].keypoints,640,640,keypoint_threshold_);t->missed=0;++t->age;
+    if(assignment[d]>=0)t=tracks_[assignment[d]].get(); else {auto n=std::make_unique<Track>();n->id=next_id_++;
+      // TODO(config): the Hailo app is configured only through environment
+      // variables and has no config file, so every track runs the compiled-in
+      // FallConfig defaults (strict temporal confirmation).  Parse a fall
+      // config here once main.cpp gains a config path.
+      tracks_.push_back(std::move(n));t=tracks_.back().get();}
+    t->box=ds[d].box;t->score=ds[d].box.score;t->pose=Pose(ds[d].keypoints,kPoseFrameSide,kPoseFrameSide,keypoint_threshold_);t->missed=0;++t->age;
     t->observation=observationFrom(*t,ts);
-    auto p=t->temporal.update(jetson_fall::makeTemporalFrame(&t->pose,t->observation,640,640),ts);
+    auto p=t->temporal.update(jetson_fall::makeTemporalFrame(&t->pose,t->observation,kPoseFrameSide,kPoseFrameSide),ts);
     t->observation.temporal_available=t->observation.valid;
     t->observation.temporal_positive=t->observation.valid&&p.positive;t->observation.temporal_probability=p.probability;
     t->output=t->fall.update(t->observation);

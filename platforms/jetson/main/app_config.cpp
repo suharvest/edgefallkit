@@ -38,6 +38,7 @@ std::string stringMember(const JsonValue& object, const char* key, const std::st
 
 void applyFallConfig(const JsonValue& object, FallConfig& config) {
     if (!object.isObject()) return;
+    config.temporal_confirmation_required = boolMember(object, "temporal_confirmation_required", config.temporal_confirmation_required);
     config.hip_drop_speed_threshold = floatMember(object, "hip_drop_speed_threshold", config.hip_drop_speed_threshold);
     config.hip_drop_distance_threshold = floatMember(object, "hip_drop_distance_threshold", config.hip_drop_distance_threshold);
     config.motion_window_sec = floatMember(object, "motion_window_sec", config.motion_window_sec);
@@ -47,6 +48,7 @@ void applyFallConfig(const JsonValue& object, FallConfig& config) {
     config.confirmation_sec = floatMember(object, "confirmation_sec", config.confirmation_sec);
     config.suspected_timeout_sec = floatMember(object, "suspected_timeout_sec", config.suspected_timeout_sec);
     config.occlusion_grace_sec = floatMember(object, "occlusion_grace_sec", config.occlusion_grace_sec);
+    config.late_confirmation_sec = floatMember(object, "late_confirmation_sec", config.late_confirmation_sec);
     config.recovery_torso_angle_deg = floatMember(object, "recovery_torso_angle_deg", config.recovery_torso_angle_deg);
     config.recovery_aspect_ratio = floatMember(object, "recovery_aspect_ratio", config.recovery_aspect_ratio);
     config.recovery_window_sec = floatMember(object, "recovery_window_sec", config.recovery_window_sec);

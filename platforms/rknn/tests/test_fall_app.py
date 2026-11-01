@@ -314,3 +314,40 @@ def test_on_frame_multiple_persons():
     assert out.payload["person_count"] == 2
     assert len(out.payload["persons"]) == 2
     assert {p["track_id"] for p in out.payload["persons"]} == {1, 2}
+
+
+def _standing(track_id: int = 0, cx: float = 0.5) -> MockDetection:
+    return MockDetection(cx=cx, cy=0.4, w=0.2, h=0.6, score=0.95, track_id=track_id,
+                         keypoints=_make_keypoints(0.35, lying=False))
+
+
+def test_untracked_detections_keep_a_stable_iou_id():
+    app = FallApp()
+    ctx = MockStreamContext("cam-iou")
+    ids = []
+    for i, cx in enumerate((0.5, 0.51, 0.52)):
+        out = app.on_frame(ctx, MockFrameResult("cam-iou", i, i * 66.0, 10.0, [_standing(0, cx)]))[0]
+        ids.append(out.payload["persons"][0]["track_id"])
+    assert len(set(ids)) == 1
+    # Two people in one frame no longer swap identities by list order.
+    out = app.on_frame(ctx, MockFrameResult("cam-iou", 9, 300.0, 10.0,
+                                            [_standing(0, 0.1), _standing(0, 0.52)]))[0]
+    by_x = {p["bbox"][0]: p["track_id"] for p in out.payload["persons"] if p["person_detected"]}
+    assert by_x[0.52] == ids[0] and by_x[0.1] != ids[0]
+
+
+def test_missing_track_is_fed_invalid_then_expires_after_occlusion_grace():
+    app = FallApp()
+    ctx = MockStreamContext("cam-miss")
+    app.on_frame(ctx, MockFrameResult("cam-miss", 1, 0.0, 10.0, [_standing(7)]))
+    out = app.on_frame(ctx, MockFrameResult("cam-miss", 2, 500.0, 10.0, []))[0]
+    validate(out.payload)
+    missing = out.payload["persons"]
+    assert len(missing) == 1 and missing[0]["track_id"] == 7
+    assert missing[0]["person_detected"] is False and missing[0]["missed_frames"] == 1
+    assert missing[0]["features"]["valid"] is False
+    assert out.payload["person_count"] == 0
+    # 0.8 s after the last sighting > occlusion_grace (0.75 s): dropped.
+    out = app.on_frame(ctx, MockFrameResult("cam-miss", 3, 800.0, 10.0, []))[0]
+    assert out.payload["persons"] == []
+    assert 7 not in ctx.state["detectors"]

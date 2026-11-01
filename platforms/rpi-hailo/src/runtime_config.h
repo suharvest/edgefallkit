@@ -30,4 +30,17 @@ inline bool parseDropOnLatency(const std::string& value) {
   throw std::invalid_argument("RTSP_DROP_ON_LATENCY must be true, false, 1, or 0");
 }
 
+// Pi 5 has hardware decode for HEVC only (rpi-hevc-dec, /dev/video19); H.264 is
+// decoded in software by avdec_h264. h265 pins the stateless V4L2 decoder so a
+// missing device fails at startup instead of silently falling back to software.
+// At 1080p the decoder only offers DMA_DRM (NV12 + Broadcom SAND128 modifier),
+// which videoconvert cannot read, so the GPU converts and scales before download.
+inline const char* rtspDepayChain(const std::string& codec) {
+  if (codec == "h264") return "rtph264depay ! h264parse ! decodebin";
+  if (codec == "h265")
+    return "rtph265depay ! h265parse ! v4l2slh265dec ! glupload ! glcolorconvert ! glcolorscale ! "
+           "video/x-raw(memory:GLMemory),format=RGBA,width=640,height=640 ! gldownload";
+  throw std::invalid_argument("RTSP_CODEC must be h264 or h265");
+}
+
 }  // namespace rpi_hailo_config

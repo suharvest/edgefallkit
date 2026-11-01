@@ -1,0 +1,81 @@
+{
+  "device": "harvest-pi",
+  "hardware": "Raspberry Pi 5, Hailo-8, Debian 13, kernel 6.12.75+rpt-rpi-2712, GStreamer 1.26.2, HailoRT 4.21",
+  "model": "yolov8s_pose.hef",
+  "model_sha256": "e19856699ed47cf866d23265827f960b263f287dab5e54e82c7ce37e12525a2d",
+  "method": {
+    "source": "spark MediaMTX, rtsp://192.168.3.42:8556/",
+    "resolution": "1920x1080",
+    "source_fps": 15,
+    "h264": "High profile, ~4 Mbps, GOP30",
+    "h265": "Main profile, ~2.35 Mbps, GOP30, no B-frames",
+    "warmup_seconds": 10,
+    "measure_seconds": 60,
+    "enable_mqtt": false,
+    "pipeline_scope": "RTSP -> decode -> RGB 640x640 -> Hailo -> pose decode/tracker -> payload construction"
+  },
+  "threshold": {"min_fps": 14.5, "decision": "pass when every stream reaches at least the threshold"},
+  "decode_paths": {
+    "h264": "rtph264depay ! h264parse ! decodebin (avdec_h264, software; Pi 5 has no H.264 hardware decoder)",
+    "h265": "rtph265depay ! h265parse ! v4l2slh265dec ! glupload ! glcolorconvert ! glcolorscale ! RGBA 640x640 GLMemory ! gldownload (hardware decode, GPU convert and scale)"
+  },
+  "results": {
+    "h264_decode_only": [
+      {"streams": 6, "pass": true},
+      {"streams": 7, "fps_min": 14.03, "fps_max": 15.03, "pass": false}
+    ],
+    "h264_full_pipeline": [
+      {"streams": 4, "fps_min": 15.0028, "fps_max": 15.0028, "mean_pipeline_ms_min": 11.1908, "mean_pipeline_ms_max": 11.5732, "cpu_percent": 264, "temperature_c": 70.8, "pass": true},
+      {"streams": 5, "fps_min": 14.9691, "fps_max": 15.0191, "mean_pipeline_ms_min": 15.2192, "mean_pipeline_ms_max": 15.8528, "cpu_percent": 350, "rss_kib": 470816, "temperature_c": 71.9, "pass": true},
+      {"streams": 6, "fps_min": 12.2558, "fps_max": 13.538, "mean_pipeline_ms_min": 18.9467, "mean_pipeline_ms_max": 19.9324, "pass": false}
+    ],
+    "h265_decode_only": [
+      {"streams": 10, "fps_min": 14.6, "fps_max": 15.7, "v3d_render_busy_percent": 79.97, "cpu_percent_of_4_cores": 32.3, "temperature_c": 63.7, "pass": true},
+      {"streams": 11, "fps_min": 14.94, "fps_max": 15.02, "temperature_c": 65.9, "pass": true},
+      {"streams": 12, "fps_min": 13.9, "fps_max": 14.2, "v3d_render_busy_percent": 92.34, "temperature_c": 65.3, "pass": false}
+    ],
+    "h265_full_pipeline": [
+      {"streams": 6, "fps_min": 14.9886, "fps_max": 15.0053, "cpu_percent": 109, "rss_mib": 477, "temperature_c": 65.3, "pass": true},
+      {"streams": 8, "fps_min": 14.9865, "fps_max": 15.0032, "cpu_percent": 145, "rss_mib": 613, "temperature_c": 68.6, "pass": true},
+      {"streams": 9, "fps_min": 14.9879, "fps_max": 15.0212, "cpu_percent": 208, "rss_mib": 681, "temperature_c": 69.7, "pass": true},
+      {"streams": 10, "fps_min": 13.4399, "fps_max": 13.5565, "v3d_render_busy_percent": 94.0, "cpu_percent_of_4_cores": 67, "temperature_c": 68.6, "pass": false},
+      {"streams": 11, "fps_min": 12.5057, "fps_max": 12.5724, "pass": false}
+    ]
+  },
+  "conclusion": {
+    "h264_max_passing_streams": 5,
+    "h265_max_passing_streams": 9,
+    "bottleneck": "V3D GPU. At 10 H.265 streams the render queue is 94% busy while CPU is 67% and the same binary pushes 300 FPS through Hailo with synthetic input (10 test://ball streams at 30 FPS each).",
+    "reference_640x640": "16 streams, see rpi-hailo8-multistream-20260830.json"
+  },
+  "gpu_cost": {
+    "measurement": "/sys/class/drm/card0/device/gpu_stats, busy = delta runtime / delta timestamp",
+    "single_stream_render_jobs_per_frame": 4.0,
+    "single_stream_render_ms_per_frame": 4.76
+  },
+  "gl_chain_alternatives_tried": [
+    {"chain": "glupload ! glcolorscale (no glcolorconvert)", "result": "Unsupported pixel format; glcolorscale only accepts RGBA texture-target=2D"},
+    {"chain": "glupload ! glcolorscale ! glcolorconvert", "result": "same error"},
+    {"chain": "gldownload to video/x-raw,format=RGB", "result": "cannot link; gldownload emits RGBA-family formats only"},
+    {"chain": "glshader fusing convert and scale", "result": "not run; its sink pad template requires format=RGBA, texture-target=2D"},
+    {"chain": "v4l2slh265dec ! pispconvert (PiSP hardware convert and scale, libpisp 1.7.0)", "result": "caps negotiate, then Plane 0 buffer is invalid, 0 frames; reproduced at 1080p, 720p and 1280x704 and with system-memory, DMABuf and documented DMA_DRM caps"}
+  ],
+  "limitations": [
+    "ENABLE_MQTT=OFF for the H.265 runs (native build); the H.264 runs used the rc3 image, where no MQTT connect or publish status is printed, so the broker leg is unverified in both.",
+    "H.264 numbers come from the rc3 image; an H.264 control run with the native binary at 5 streams measured 15.0044-15.021 FPS, matching it.",
+    "The H.265 11-stream decode-only run shared the machine with an unrelated container process at 81.8% CPU, so that boundary is conservative.",
+    "Source clips loop a 70-frame GMDCSA subject-4 Fall/01 encode; these are throughput results, not fall-detection accuracy.",
+    "get_throttled reported 0xe0000 throughout: throttling occurred earlier since boot, no current-state bit was set during any run."
+  ],
+  "artifacts": {
+    "remote_device": "harvest-pi",
+    "remote_paths": [
+      "/tmp/edgefallkit-hailo-1080p/full-h264/",
+      "/tmp/edgefallkit-hailo-1080p/full-h265-gl/",
+      "/tmp/edgefallkit-hailo-1080p/decode-h265-gl/",
+      "/tmp/edgefallkit-hailo-1080p/bottleneck/",
+      "/tmp/edgefallkit-hailo-1080p/gl-variants/"
+    ],
+    "note": "/tmp is tmpfs on this device; the logs do not survive a reboot."
+  }
+}

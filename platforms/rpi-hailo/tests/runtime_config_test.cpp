@@ -38,5 +38,10 @@ int main() {
   for (const std::string value : {"-1", "abc", "1x"})
     expectInvalid([&] { rpi_hailo_config::parseNonNegativeInt("BENCHMARK_SECONDS", value); });
 
+  require(std::string(rpi_hailo_config::rtspDepayChain("h264")) == "rtph264depay ! h264parse ! decodebin", "codec h264");
+  require(std::string(rpi_hailo_config::rtspDepayChain("h265")).rfind("rtph265depay ! h265parse ! v4l2slh265dec ! glupload", 0) == 0, "codec h265");
+  for (const std::string value : {"H264", "hevc", "auto", ""})
+    expectInvalid([&] { rpi_hailo_config::rtspDepayChain(value); });
+
   std::cout << "runtime config test passed\n";
 }

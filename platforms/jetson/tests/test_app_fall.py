@@ -174,6 +174,46 @@ class AppFallTest(unittest.TestCase):
         edge = events.index(True)
         self.assertEqual(tracks[edge][2], 0.0)
 
+    def test_invalid_pose_frame_never_fakes_a_hip_drop(self):
+        # A detected person whose torso keypoints are all below threshold is
+        # an invalid pose.  It must not overwrite the hip history (hip_y=0
+        # used to make the next valid frame look like a fast drop).
+        tracker = APP.MultiPersonTracker(FakeBridge(positive_from=0.0), make_config())
+        blind = detection(0.45, 8.0, 0.45)
+        blind.keypoints = [APP.Keypoint(p.x, p.y, 0.0) for p in blind.keypoints]
+        snapshots = []
+        for ts, det in [(0.0, detection(0.45, 8.0, 0.45)),
+                        (0.1, detection(0.45, 8.0, 0.45)),
+                        (0.2, blind),
+                        (0.3, detection(0.47, 80.0, 2.45)),
+                        (0.4, detection(0.47, 80.0, 2.45))]:
+            tracks = tracker.update([det], ts, 640, 480)
+            first = tracks[0]
+            snapshots.append((first.features.valid, first.features.hip_drop_speed,
+                              first.state, first.fall_event, first.previous_hip_y))
+        self.assertFalse(snapshots[2][0])
+        self.assertEqual(snapshots[2][4], 0.45)       # history kept
+        self.assertLess(max(s[1] for s in snapshots), 0.25)
+        self.assertEqual({s[2] for s in snapshots}, {"normal"})
+        self.assertFalse(any(s[3] for s in snapshots))
+
+    def test_shoulderless_pose_is_invalid(self):
+        tracker = APP.MultiPersonTracker(FakeBridge(), make_config())
+        det = detection(0.45, 8.0, 0.45)
+        for index in (APP.LEFT_SHOULDER, APP.RIGHT_SHOULDER):
+            det.keypoints[index] = APP.Keypoint(0.5, 0.3, 0.0)
+        tracks = tracker.update([det], 0.0, 640, 480)
+        self.assertFalse(tracks[0].features.valid)
+
+    def test_invalid_frames_never_confirm_in_legacy_geometry_mode(self):
+        tracker = APP.MultiPersonTracker(
+            FakeBridge(), make_config(temporal_confirmation_required=False))
+        frames = list(fall_frames(1.0, 150, gap=(1.45, 4.0)))
+        tracks, events = replay(tracker, frames)
+        for (_, _, _, _, valid), event in zip(frames, events):
+            if event:
+                self.assertTrue(valid)
+
 
 if __name__ == "__main__":
     unittest.main()

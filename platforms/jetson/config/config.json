@@ -11,6 +11,7 @@
   "max_detections": 128,
   "rtsp_latency_ms": 100,
   "publish_empty_frames": false,
+  "location_cooldown_sec": 10.0,
   "tracker": {
     "iou_threshold": 0.20,
     "center_distance_threshold": 0.25,

@@ -37,6 +37,11 @@
     "max_detections": {"type": "integer", "minimum": 1, "maximum": 4096},
     "rtsp_latency_ms": {"type": "integer", "minimum": 0},
     "publish_empty_frames": {"type": "boolean"},
+    "location_cooldown_sec": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Suppress a new fall event within this many seconds near an emitted event whose track was lost (0 disables)."
+    },
     "tracker": {"type": "object"},
     "fall": {
       "type": "object",

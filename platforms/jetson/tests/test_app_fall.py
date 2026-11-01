@@ -214,6 +214,40 @@ class AppFallTest(unittest.TestCase):
             if event:
                 self.assertTrue(valid)
 
+    def test_location_cooldown_rules(self):
+        lc=APP.LocationCooldown(10.0)
+        box=(100,100,200,300)
+        self.assertFalse(lc.hit(1,box,0.0,{1}))
+        lc.remember(1,box,0.0)
+        # Same place, new id, old track gone -> suppressed.
+        self.assertTrue(lc.hit(2,(110,110,210,310),2.0,{2}))
+        # Old track still visible -> a different person.
+        self.assertFalse(lc.hit(2,(110,110,210,310),2.0,{1,2}))
+        # Far away (> 0.75 x larger side = 150 px) -> not suppressed.
+        self.assertFalse(lc.hit(2,(400,100,500,300),2.0,{2}))
+        # Same frame as the emitted event -> not suppressed.
+        self.assertFalse(lc.hit(2,box,0.0,{2}))
+        # Suppressed edges do not extend the window: expires 10 s after emit.
+        self.assertTrue(lc.hit(3,box,9.9,{3}))
+        self.assertFalse(lc.hit(4,box,10.1,{4}))
+        disabled=APP.LocationCooldown(0.0); disabled.remember(1,box,0.0)
+        self.assertFalse(disabled.hit(2,box,1.0,{2}))
+
+    def test_tracker_suppresses_refall_under_new_id_at_same_place(self):
+        tracker = APP.MultiPersonTracker(FakeBridge(), make_config())
+        tracker.update([detection()], 0.0, 640, 480)
+        first = tracker.tracks[0]
+        first.fall_event = True
+        tracker.location_cooldown.remember(first.track_id, (0.4, 0.25, 0.6, 0.65), 0.0)
+        first.missed = tracker.max_missed + 1     # identity lost
+        tracker.update([], 0.1, 640, 480)
+        tracks = tracker.update([detection()], 0.2, 640, 480)
+        fresh = tracks[0]
+        self.assertNotEqual(fresh.track_id, first.track_id)
+        fresh.fall_event = True
+        self.assertTrue(tracker.location_cooldown.hit(
+            fresh.track_id, (0.4, 0.25, 0.6, 0.65), 0.3, {fresh.track_id}))
+
 
 if __name__ == "__main__":
     unittest.main()

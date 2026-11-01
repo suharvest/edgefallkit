@@ -2,7 +2,9 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parents[1]))
-from fall_core import FallConfig,FallDetector,Observation
+import tempfile
+import numpy as np
+from fall_core import Detection,FallConfig,FallDetector,Observation,TemporalMLP,make_observation
 
 
 def obs(ts,hip,torso,aspect,valid=True,positive=False):
@@ -131,6 +133,75 @@ class FallCoreTest(unittest.TestCase):
         edges=[o for o in outs if o["fall_event"]]
         self.assertEqual(len(edges),1)
         self.assertEqual(edges[0]["features"]["hip_drop_speed"],0.0)
+
+
+def person(hip_conf=.9,shoulder_conf=.9,box=(200,100,300,400)):
+    kp=[[250.0,200.0,.9] for _ in range(17)]
+    kp[5]=[240.0,150.0,shoulder_conf]; kp[6]=[260.0,150.0,0.0]
+    kp[11]=[240.0,300.0,hip_conf]; kp[12]=[260.0,300.0,0.0]
+    return Detection(list(box),.8,kp)
+
+
+class ReferenceAlignmentTest(unittest.TestCase):
+    def test_clamp_matches_reference_bounds(self):
+        cfg=FallConfig(hip_drop_speed=-1,torso_angle=120,aspect=.5,min_suspected_features=7,
+                       confirmation=2.0,suspected_timeout=1.0,recovery_angle=0,
+                       recovery_aspect=.2,cooldown=-3,late_confirmation=-1).clamp()
+        self.assertEqual((cfg.hip_drop_speed,cfg.torso_angle,cfg.aspect),(0.0,89.0,1.0))
+        self.assertEqual(cfg.min_suspected_features,3)
+        self.assertEqual(cfg.suspected_timeout,2.0)
+        self.assertEqual((cfg.recovery_angle,cfg.recovery_aspect),(1.0,1.0))
+        self.assertEqual((cfg.cooldown,cfg.late_confirmation),(0.0,0.0))
+
+    def test_detector_clamps_a_private_copy(self):
+        shared=FallConfig(min_suspected_features=0)
+        d=FallDetector(shared)
+        self.assertEqual(d.cfg.min_suspected_features,1)
+        self.assertEqual(shared.min_suspected_features,0)
+
+    def test_observation_one_side_fallback_and_normalised_hip(self):
+        o=make_observation(person(),0.0,640,480)
+        self.assertTrue(o.valid)
+        self.assertAlmostEqual(o.hip_y,300/480)
+        self.assertFalse(make_observation(person(shoulder_conf=0),0.0,640,480).valid)
+        self.assertFalse(make_observation(person(box=(200,100,300,100)),0.0,640,480).valid)
+
+    def test_undefined_torso_angle_is_invalid(self):
+        det=person(); det.keypoints[5]=[240.0,300.0,.9]
+        self.assertFalse(make_observation(det,0.0,640,480).valid)
+
+    def test_recovery_returns_to_normal_through_full_reset(self):
+        d=FallDetector(FallConfig())
+        replay(d,list(fall_frames(1.0,60)),positive_from=1.6)
+        self.assertEqual(d.state,"fallen")
+        for i in range(60,120):
+            d.update(obs(i/15.0,.45,8.0,.45))
+        self.assertEqual(d.state,"normal")
+        self.assertEqual((d.motion_triggered,d.last_drop,d.suspected_since,d.max_drop),(False,-1.0,-1.0,0.0))
+
+    def test_present_but_invalid_pose_fills_keypoints_with_valid_flag_zero(self):
+        det=person(shoulder_conf=0)
+        o=make_observation(det,0.0,640,480)
+        frame=TemporalMLP.pose_frame(det,o,640,480)
+        self.assertFalse(o.valid)
+        self.assertEqual(frame[-1],0.0)
+        self.assertGreater(np.abs(frame[:34]).sum(),0.0)
+        self.assertFalse(TemporalMLP.pose_frame(None,o,640,480).any())
+
+    def test_temporal_window_trim_and_backward_timestamp_reset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"t.npz"
+            np.savez(path,frame_mask=np.ones(56,np.float32),mean=np.zeros(504,np.float32),
+                     scale=np.ones(504,np.float32),w1=np.zeros((504,1),np.float32),
+                     b1=np.zeros(1,np.float32),w2=np.ones(1,np.float32),b2=0.0,
+                     threshold=.5,consecutive=1,window=48)
+            t=TemporalMLP(str(path))
+            for i in range(120):
+                t.update(np.zeros(56,np.float32),i/15.0)
+            span=t.frames[-1][0]-t.frames[1][0]
+            self.assertLessEqual(span,47/15.0+0.5+1e-6)
+            t.update(np.zeros(56,np.float32),1.0)
+            self.assertEqual(len(t.frames),1)
 
 
 if __name__ == "__main__": unittest.main()

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 import numpy as np
@@ -29,23 +29,41 @@ class Observation:
     temporal_probability: float = 0.0
 
 
+def _midpoint(kp, a: int, b: int, threshold: float) -> Optional[tuple[float, float]]:
+    """Average of joints a, b; one visible side alone; None when neither is."""
+    va = len(kp[a]) >= 3 and kp[a][2] >= threshold
+    vb = len(kp[b]) >= 3 and kp[b][2] >= threshold
+    if va and vb:
+        return ((kp[a][0] + kp[b][0]) * 0.5, (kp[a][1] + kp[b][1]) * 0.5)
+    if va:
+        return (kp[a][0], kp[a][1])
+    if vb:
+        return (kp[b][0], kp[b][1])
+    return None
+
+
 def make_observation(det: Optional[Detection], timestamp: float, width: int, height: int,
                      keypoint_threshold: float = 0.25) -> Observation:
+    """Same rules as kit/logic/geometry.py make_observation (reCamera Pro)."""
     if det is None or width <= 0 or height <= 0 or len(det.keypoints) < 17:
         return Observation(timestamp=timestamp)
-    kp = det.keypoints
-    needed = (5, 6, 11, 12)
-    if any(len(kp[i]) < 3 or kp[i][2] < keypoint_threshold for i in needed):
-        return Observation(timestamp=timestamp, person_score=det.score)
-    shoulder_x = (kp[5][0] + kp[6][0]) * 0.5
-    shoulder_y = (kp[5][1] + kp[6][1]) * 0.5
-    hip_x = (kp[11][0] + kp[12][0]) * 0.5
-    hip_y = (kp[11][1] + kp[12][1]) * 0.5
-    dx, dy = hip_x - shoulder_x, hip_y - shoulder_y
-    angle = math.degrees(math.atan2(abs(dx), max(abs(dy), 1e-6)))
+    invalid = Observation(timestamp=timestamp, person_score=det.score)
     x1, y1, x2, y2 = det.box
-    aspect = max(0.0, x2 - x1) / max(1e-6, y2 - y1)
-    return Observation(True, timestamp, hip_y / height, angle, aspect, det.score)
+    if y2 - y1 <= 1e-4:
+        return invalid
+    kp = det.keypoints
+    hip = _midpoint(kp, 11, 12, keypoint_threshold)
+    shoulder = _midpoint(kp, 5, 6, keypoint_threshold)
+    if hip is None or shoulder is None:
+        return invalid
+    dx, dy = hip[0] - shoulder[0], hip[1] - shoulder[1]
+    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+        return invalid
+    angle = math.degrees(math.atan2(abs(dx), abs(dy)))
+    if not math.isfinite(angle):
+        return invalid
+    aspect = (x2 - x1) / (y2 - y1)
+    return Observation(True, timestamp, hip[1] / height, angle, aspect, det.score)
 
 
 @dataclass
@@ -110,6 +128,11 @@ class TemporalMLP:
         self.consecutive = int(data["consecutive"])
         self.window = int(data.get("window", 48))
         self.frames: deque[tuple[float, np.ndarray]] = deque()
+        self.reset()
+
+    def reset(self) -> None:
+        self.frames.clear()
+        self.last_time = -1.0
         self.last_eval = -1.0
         self.positive_run = 0
         self.probability = 0.0
@@ -117,40 +140,55 @@ class TemporalMLP:
 
     @staticmethod
     def pose_frame(det: Optional[Detection], obs: Observation, width: int, height: int) -> np.ndarray:
+        """56-value pelvis-centred COCO-17 frame, as reCamera Pro app.py.
+
+        A detected person whose pose is not a valid observation still fills
+        the keypoint slots; only the valid flag (last value) is 0."""
         out = np.zeros(56, np.float32)
-        if det is None or not obs.valid:
+        if det is None or width <= 0 or height <= 0 or len(det.keypoints) < 17:
             return out
-        pts = np.asarray(det.keypoints[:17], np.float32)
+        try:
+            pts = np.asarray(det.keypoints[:17], np.float32)
+        except (TypeError, ValueError):
+            return out
+        if pts.shape != (17, 3) or not np.all(np.isfinite(pts)):
+            return out
         conf = np.clip(pts[:, 2], 0, 1)
         xy = pts[:, :2] / np.array([width, height], np.float32)
-        weights = conf[11] + conf[12]
-        if weights < 0.1:
-            visible = conf >= 0.1
-            if not visible.any():
-                return out
-            hip = np.average(xy[visible], axis=0, weights=conf[visible])
-        else:
-            hip = (xy[11] * conf[11] + xy[12] * conf[12]) / weights
-        sw = conf[5] + conf[6]
-        shoulder = (xy[5] * conf[5] + xy[6] * conf[6]) / max(sw, 1e-6)
-        scale = float(np.linalg.norm(shoulder - hip)) if sw >= 0.1 else 0.0
-        if scale < 0.04:
-            visible = conf >= 0.1
-            span = np.ptp(xy[visible], axis=0) if visible.any() else np.zeros(2)
-            scale = max(float(span.max()) * 0.35, 0.04)
+
+        def midpoint(a: int, b: int):
+            weight = float(conf[a] + conf[b])
+            if weight < 0.1:
+                return np.zeros(2, np.float32), 0.0
+            return (xy[a] * conf[a] + xy[b] * conf[b]) / weight, weight * 0.5
+
+        hip, hip_conf = midpoint(11, 12)
+        shoulder, shoulder_conf = midpoint(5, 6)
         visible = conf >= 0.1
+        if hip_conf < 0.1:
+            weight = float(conf[visible].sum())
+            if weight <= 0.0:
+                return out
+            hip = (xy[visible] * conf[visible, None]).sum(axis=0) / weight
+        scale = float(np.linalg.norm(shoulder - hip)) if shoulder_conf >= 0.1 else 0.0
+        if scale < 0.04 and visible.any():
+            scale = float(np.ptp(xy[visible], axis=0).max()) * 0.35
+        scale = max(scale, 0.04)
         centered = np.clip((xy - hip) / scale, -4, 4)
-        for i in range(17):
-            if visible[i]:
-                out[i * 2:i * 2 + 2] = centered[i]
+        out[:34].reshape(17, 2)[visible] = centered[visible]
         out[34:51] = conf
         out[-5:] = [obs.hip_y, obs.torso_angle / 90, min(obs.aspect, 4) / 4,
-                    obs.person_score, 1]
+                    obs.person_score, 1.0 if obs.valid else 0.0]
         return out
 
     def update(self, frame: np.ndarray, now: float) -> tuple[bool, float]:
+        now = float(now)
+        if self.last_time >= 0.0 and now < self.last_time:
+            self.reset()
+        self.last_time = now
         self.frames.append((now, frame * self.frame_mask))
-        while len(self.frames) > 1 and self.frames[1][0] < now - 3.7:
+        cutoff = now - (self.window - 1) / 15.0 - 0.5
+        while len(self.frames) > 1 and self.frames[1][0] < cutoff:
             self.frames.popleft()
         if self.last_eval >= 0 and now - self.last_eval < 0.2 - 1e-6:
             return self.positive, self.probability
@@ -158,7 +196,7 @@ class TemporalMLP:
         ts = np.array([x[0] for x in self.frames])
         values = np.stack([x[1] for x in self.frames])
         wanted = now - np.arange(self.window - 1, -1, -1, dtype=np.float64) / 15.0
-        seq = values[np.searchsorted(ts, wanted, side="right").clip(1) - 1]
+        seq = values[np.searchsorted(ts, wanted + 1e-6, side="right").clip(1) - 1]
         bins = seq.reshape(6, self.window // 6, 56).mean(axis=1).reshape(-1)
         feat = np.concatenate((bins, seq.std(axis=0), seq[-1] - seq[0], np.ptp(seq, axis=0)))
         norm = (feat - self.mean) / np.maximum(self.scale, 1e-12)
@@ -190,6 +228,24 @@ class FallConfig:
     recovery_window: float = 2.0
     cooldown: float = 3.0
 
+    def clamp(self) -> "FallConfig":
+        """Same bounds as kit/logic/temporal.py FallConfig.clamp()."""
+        self.hip_drop_speed = max(0.0, self.hip_drop_speed)
+        self.hip_drop_distance = max(0.0, self.hip_drop_distance)
+        self.motion_window = max(0.0, self.motion_window)
+        self.torso_angle = min(89.0, max(1.0, self.torso_angle))
+        self.aspect = max(1.0, self.aspect)
+        self.min_suspected_features = min(3, max(1, int(self.min_suspected_features)))
+        self.confirmation = max(0.0, self.confirmation)
+        self.suspected_timeout = max(self.confirmation, self.suspected_timeout)
+        self.occlusion_grace = max(0.0, self.occlusion_grace)
+        self.recovery_angle = min(89.0, max(1.0, self.recovery_angle))
+        self.recovery_aspect = max(1.0, self.recovery_aspect)
+        self.recovery_window = max(0.0, self.recovery_window)
+        self.cooldown = max(0.0, self.cooldown)
+        self.late_confirmation = max(0.0, self.late_confirmation)
+        return self
+
 
 class FallDetector:
     """normal -> suspected -> fallen -> recovering -> normal.
@@ -204,7 +260,8 @@ class FallDetector:
     """
 
     def __init__(self, cfg: FallConfig):
-        self.cfg = cfg; self.state = "normal"; self.event_id = 0
+        # Per-detector copy: callers may share one FallConfig across tracks.
+        self.cfg = replace(cfg).clamp(); self.state = "normal"; self.event_id = 0
         self.prev_hip = None; self.prev_time = None
         self.baseline = None; self.baseline_time = -1.0; self.gap_since_baseline = False
         self.last_drop = -1.0; self.suspected_since = -1.0
@@ -289,12 +346,15 @@ class FallDetector:
                 # bounded late-confirmation latch is kept.
                 self._to_normal()
         elif self.state == "fallen" and upright:
-            self.state = "recovering"; self.recovery_since = o.timestamp
+            if cfg.recovery_window <= 0.0:
+                self._to_normal()
+            else:
+                self.state = "recovering"; self.recovery_since = o.timestamp
         elif self.state == "recovering":
             if not upright:
                 self.state = "fallen"; self.recovery_since = -1.0
             elif o.timestamp - self.recovery_since >= cfg.recovery_window:
-                self.state = "normal"; self.recovery_since = -1.0; self.max_drop = 0.0
+                self._to_normal()
         if event:
             self.event_id += 1; self.cooldown_until = o.timestamp + cfg.cooldown
         self.prev_hip, self.prev_time = o.hip_y, o.timestamp

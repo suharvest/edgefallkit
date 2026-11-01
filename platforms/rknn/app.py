@@ -6,7 +6,7 @@ import argparse, json, os, queue, signal, socket, ssl, struct, threading, time
 from dataclasses import dataclass
 from pathlib import Path
 
-from fall_core import Detection, FallConfig, FallDetector, IoUTracker, TemporalMLP, make_observation
+from fall_core import Detection, FallConfig, FallDetector, IoUTracker, LocationCooldown, TemporalMLP, make_observation
 from rknn_pose import PoseDecoder, RKNNPose
 from video_source import create_video_source, frame_canvas, validate_backend_config
 
@@ -437,6 +437,7 @@ class StreamWorker(threading.Thread):
         self.tracker = IoUTracker(float(cfg.get("tracker", {}).get("iou_threshold", .2)),
                                   float(cfg.get("tracker", {}).get("max_lost_sec", .75)))
         self.detectors = {}; self.temporal = {}; self.frame_id = 0; self.global_event_id = 0
+        self.location_cooldown = LocationCooldown(float(cfg.get("location_cooldown_sec", 10.0)))
         self.exception = None; self.source = None; self.source_lock = threading.Lock()
 
     def stop(self):
@@ -464,6 +465,7 @@ class StreamWorker(threading.Thread):
         for tid in tracker.expired_ids:
             self.detectors.pop(tid, None); self.temporal.pop(tid, None)
         people = []; events = []
+        visible_ids = {tr.track_id for tr in tracks if tr.detection is not None}
         for tr in tracks:
             if tr.track_id not in self.detectors:
                 self.detectors[tr.track_id] = FallDetector(FallConfig(**self.cfg.get("fall", {})))
@@ -485,8 +487,14 @@ class StreamWorker(threading.Thread):
                     "bbox": [round((x1+x2)/2/canvas_w,4),round((y1+y2)/2/canvas_h,4),
                              round((x2-x1)/canvas_w,4),round((y2-y1)/canvas_h,4)],
                     "pose17": pose17, "keypoints": [], **result}
+            if result["fall_event"] and self.location_cooldown.hit(tr.track_id, tr.box, now, visible_ids):
+                # Same person under a new track id at a recent event: logged, not emitted.
+                print(f"[{self.stream['id']}] suppressed fall track={tr.track_id} (location cooldown)", flush=True)
+                item["fall_event"] = False
+            elif result["fall_event"]:
+                self.location_cooldown.remember(tr.track_id, tr.box, now)
             people.append(item)
-            if result["fall_event"]:
+            if item["fall_event"]:
                 self.global_event_id += 1
                 events.append({"kind": "fall", "track_id": tr.track_id, **result,
                                "per_track_event_id": result["event_id"], "event_id": self.global_event_id,

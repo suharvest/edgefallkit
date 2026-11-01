@@ -117,6 +117,52 @@ class IoUTracker:
         return [self.tracks[k] for k in sorted(self.tracks)]
 
 
+# Radius of a "same place" match, as a multiple of the larger box side.
+LOCATION_RADIUS_SCALE = 0.75
+# Upper bound on remembered emitted events (expired ones are dropped first).
+RECENT_FALLS_MAX = 32
+
+
+def boxes_near(a, b) -> bool:
+    """Box centres (x1, y1, x2, y2) within 0.75 x the larger box side."""
+    ax1, ay1, ax2, ay2 = (float(v) for v in a[:4])
+    bx1, by1, bx2, by2 = (float(v) for v in b[:4])
+    side = max(ax2 - ax1, ay2 - ay1, bx2 - bx1, by2 - by1, 0.0)
+    dx = (ax1 + ax2 - bx1 - bx2) * 0.5
+    dy = (ay1 + ay2 - by1 - by2) * 0.5
+    return math.hypot(dx, dy) <= LOCATION_RADIUS_SCALE * side
+
+
+class LocationCooldown:
+    """Suppress a fall edge that re-detects a recent event under a new id.
+
+    Same rule as reCamera Pro apps/fall-detection/app.py: an edge is
+    suppressed only when an event EMITTED within the last ``window_sec`` lies
+    nearby AND that event's track is not visible in the current frame (its
+    identity was lost).  An event whose track is still visible, or one from
+    this same frame, is a different person.  The window runs from the emitted
+    event only; suppressed edges do not extend it.
+    """
+
+    def __init__(self, window_sec: float = 10.0):
+        self.window_sec = max(0.0, float(window_sec))
+        self.recent: list = []
+
+    def hit(self, track_id, box, now: float, visible_ids) -> bool:
+        if self.window_sec <= 0.0:
+            self.recent = []
+            return False
+        self.recent = [f for f in self.recent if 0.0 <= now - f[0] <= self.window_sec]
+        return any(ts < now and tid != track_id and tid not in visible_ids and boxes_near(b, box)
+                   for ts, b, tid in self.recent)
+
+    def remember(self, track_id, box, now: float) -> None:
+        if self.window_sec <= 0.0:
+            return
+        self.recent.append((now, list(box), track_id))
+        del self.recent[:-RECENT_FALLS_MAX]
+
+
 class TemporalMLP:
     """Frozen 48-frame NumPy MLP; model is exported from the Jetson C++ header."""
     def __init__(self, path: str):

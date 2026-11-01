@@ -52,6 +52,7 @@ try:
         Observation,
         make_observation,
         IoUTracker,
+        LocationCooldown,
         TemporalMLP,
         FallConfig,
         FallDetector,
@@ -62,6 +63,7 @@ except ImportError:
         Observation,
         make_observation,
         IoUTracker,
+        LocationCooldown,
         TemporalMLP,
         FallConfig,
         FallDetector,
@@ -185,6 +187,7 @@ class FallApp:
         self.topic_template: str = "recomputer/fall-detection/results/{stream_id}"
         self.keypoint_threshold: float = 0.25
         self.fall_config: FallConfig = FallConfig()
+        self.location_cooldown_sec: float = 10.0
         if options is not None:
             self.configure(options, device_id)
 
@@ -197,6 +200,7 @@ class FallApp:
         )
         self.keypoint_threshold = float(self.options.get("keypoint_threshold", 0.25))
         self.fall_config = FallConfig(**self.options.get("fall", {}))
+        self.location_cooldown_sec = float(self.options.get("location_cooldown_sec", 10.0))
 
     def analyzers(self, spec: StreamSpec) -> list[dict]:
         return []
@@ -285,6 +289,16 @@ class FallApp:
                 obs.temporal_probability = prob
 
             result = ctx.state["detectors"][tid].update(obs)
+
+            cooldown = ctx.state.get("location_cooldown")
+            if cooldown is None or cooldown.window_sec != max(0.0, self.location_cooldown_sec):
+                cooldown = ctx.state["location_cooldown"] = LocationCooldown(self.location_cooldown_sec)
+            box_px = tracks[tid]["box"]
+            if result["fall_event"] and cooldown.hit(tid, box_px, now, visible_ids):
+                # Same person under a new track id at a recent event: not emitted.
+                result = {**result, "fall_event": False}
+            elif result["fall_event"]:
+                cooldown.remember(tid, box_px, now)
 
             if result["fall_event"]:
                 ctx.state["global_event_id"] += 1

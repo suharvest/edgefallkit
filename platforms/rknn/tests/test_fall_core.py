@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parents[1]))
 import tempfile
 import numpy as np
-from fall_core import Detection,FallConfig,FallDetector,Observation,TemporalMLP,make_observation
+from fall_core import LocationCooldown as LC,Detection,FallConfig,FallDetector,Observation,TemporalMLP,make_observation
 
 
 def obs(ts,hip,torso,aspect,valid=True,positive=False):
@@ -202,6 +202,25 @@ class ReferenceAlignmentTest(unittest.TestCase):
             self.assertLessEqual(span,47/15.0+0.5+1e-6)
             t.update(np.zeros(56,np.float32),1.0)
             self.assertEqual(len(t.frames),1)
+
+    def test_location_cooldown_rules(self):
+        lc=LC(10.0)
+        box=(100,100,200,300)
+        self.assertFalse(lc.hit(1,box,0.0,{1}))
+        lc.remember(1,box,0.0)
+        # Same place, new id, old track gone -> suppressed.
+        self.assertTrue(lc.hit(2,(110,110,210,310),2.0,{2}))
+        # Old track still visible -> a different person.
+        self.assertFalse(lc.hit(2,(110,110,210,310),2.0,{1,2}))
+        # Far away (> 0.75 x larger side = 150 px) -> not suppressed.
+        self.assertFalse(lc.hit(2,(400,100,500,300),2.0,{2}))
+        # Same frame as the emitted event -> not suppressed.
+        self.assertFalse(lc.hit(2,box,0.0,{2}))
+        # Suppressed edges do not extend the window: expires 10 s after emit.
+        self.assertTrue(lc.hit(3,box,9.9,{3}))
+        self.assertFalse(lc.hit(4,box,10.1,{4}))
+        disabled=LC(0.0); disabled.remember(1,box,0.0)
+        self.assertFalse(disabled.hit(2,box,1.0,{2}))
 
 
 if __name__ == "__main__": unittest.main()
